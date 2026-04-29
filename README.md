@@ -1,1 +1,1 @@
-# restaurant-manager-api
+# RestaurantManager.Api
