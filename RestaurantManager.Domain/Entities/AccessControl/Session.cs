@@ -1,8 +1,8 @@
-﻿using System.ComponentModel.DataAnnotations.Schema;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace RestaurantManager.Domain.Entities.AccessControl;
 
-[Table(name: "Session", Schema = "accesscontrol")]
+[Table(name: "Sessions", Schema = "accesscontrol")]
 public partial class Session
 {
     public Guid Id { get; set; }

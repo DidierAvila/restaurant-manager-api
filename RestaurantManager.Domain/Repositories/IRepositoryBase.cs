@@ -14,6 +14,5 @@ namespace RestaurantManager.Domain.Repositories
         Task Update(TEntity entity, CancellationToken cancellationToken);
         Task<TEntity?> Find(Expression<Func<TEntity, bool>> expr, CancellationToken cancellationToken);
         Task<IEnumerable<TEntity>?> Finds(Expression<Func<TEntity, bool>> expr, CancellationToken cancellationToken);
-        void GetByIdAsync(Guid userId);
     }
 }

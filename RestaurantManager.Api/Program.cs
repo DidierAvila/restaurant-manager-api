@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Npgsql;
 using RestaurantManager.Api.Extensions;
+using RestaurantManager.Domain.Entities;
 using RestaurantManager.Infrastructure.DbContexts;
 using System.Text;
 
@@ -32,11 +34,12 @@ builder.Services.AddSwaggerGen(c =>
     // Configurar autenticación JWT en Swagger
     c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
     {
-        Description = "JWT Authorization. Ingresa 'Bearer' [espacio] y luego tu token. Ejemplo: 'Bearer eyJhbGc...'",
+        Description = "JWT Authorization header usando el esquema Bearer. Ejemplo: 'Bearer {token}'",
         Name = "Authorization",
         In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
-        Scheme = "Bearer"
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT"
     });
 
     c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
@@ -57,7 +60,7 @@ builder.Services.AddSwaggerGen(c =>
 
 // Configure CORS
 var allowedOrigins = builder.Configuration.GetSection("CorsSettings:AllowedOrigins").Get<string[]>()
-                     ?? new[] { "http://localhost:4200" };
+                     ?? new[] { "http://localhost:30001" };
 
 builder.Services.AddCors(options =>
 {
@@ -77,11 +80,13 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Configure Entity Framework
+// Configurar DbContext usando el DataSource con enums mapeados
 builder.Services.AddDbContext<RestaurantManagerDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"), npgsqlOptions =>
     {
-        npgsqlOptions.CommandTimeout(120);
+        npgsqlOptions.MapEnum<DishCategory>("categoria_menu", "public");
+        npgsqlOptions.MapEnum<OrderStatus>("order_status", "public");
+        npgsqlOptions.CommandTimeout(120); // 2 minutos timeout para comandos
         npgsqlOptions.EnableRetryOnFailure(
             maxRetryCount: 3,
             maxRetryDelay: TimeSpan.FromSeconds(30),

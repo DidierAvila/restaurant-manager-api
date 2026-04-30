@@ -19,8 +19,8 @@ public partial class User
     public DateTime? CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public required string ExtraData { get; set; }
-    public required bool Status { get; set; }
+    public bool? Status { get; set; }
     public virtual ICollection<Session> Sessions { get; set; } = [];
     public virtual ICollection<Role> Roles { get; set; } = [];
-    public string? UserType { get; set; }
+    public virtual UserType? UserType { get; set; }
 }

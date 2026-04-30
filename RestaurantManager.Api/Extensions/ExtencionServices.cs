@@ -15,10 +15,13 @@ using RestaurantManager.Application.Features.AccessControl.Queries.Roles;
 using RestaurantManager.Application.Features.AccessControl.Queries.UserMe;
 using RestaurantManager.Application.Features.AccessControl.Queries.Users;
 using RestaurantManager.Domain.Entities.AccessControl;
+using RestaurantManager.Domain.Entities;
 using RestaurantManager.Domain.Repositories;
 using RestaurantManager.Domain.Repositories.AccessControl;
 using RestaurantManager.Infrastructure.Repositories;
 using RestaurantManager.Infrastructure.Repositories.Auth;
+using RestaurantManager.Application.Mappings.AccessControl;
+using RestaurantManager.Application.Mappings.Restaurant;
 
 namespace RestaurantManager.Api.Extensions;
 
@@ -27,7 +30,17 @@ public static class ExtencionServices
     public static IServiceCollection AddApiExtention(this IServiceCollection services)
     {
         // AutoMapper
-        //services.AddAutoMapper(typeof(UserProfile), typeof(UserTypeProfile), typeof(PermissionProfile), typeof(AuthProfile), typeof(RoleProfile), typeof(RolePermissionProfile), typeof(MenuProfile), typeof(MenuPermissionProfile), typeof(UserRelationshipProfile));
+        services.AddAutoMapper(
+            typeof(UserProfile),
+            typeof(PermissionProfile),
+            typeof(AuthProfile),
+            typeof(RoleProfile),
+            typeof(RolePermissionProfile),
+            typeof(DishProfile),
+            typeof(OrderProfile),
+            typeof(OrderItemProfile),
+            typeof(UserProfile)
+        );
 
         // Authentication Commands
         services.AddScoped<ILoginCommand, LoginCommand>();
@@ -92,8 +105,13 @@ public static class ExtencionServices
         services.AddScoped<GetUserMe>();
         services.AddScoped<IUserMeQueryHandler, UserMeQueryHandler>();
 
-        // Repositories
+        // UserType Queries
+        services.AddScoped<GetUserTypesForDropdown>();
+        services.AddScoped<IUserTypeQueryHandler, UserTypeQueryHandler>();
+
+        // Repositories - Access Control
         services.AddScoped<IRepositoryBase<User>, RepositoryBase<User>>();
+        services.AddScoped<IRepositoryBase<UserType>, RepositoryBase<UserType>>();
         services.AddScoped<IRepositoryBase<Session>, RepositoryBase<Session>>();
         services.AddScoped<ISessionRepository, SessionRepository>();
         services.AddScoped<IRepositoryBase<Role>, RepositoryBase<Role>>();
@@ -102,6 +120,11 @@ public static class ExtencionServices
         services.AddScoped<IRepositoryBase<UserRole>, RepositoryBase<UserRole>>();
         services.AddScoped<IUserRoleRepository, UserRoleRepository>();
         services.AddScoped<IMenuRepository, MenuRepository>();
+
+        // Repositories - Restaurant Business
+        services.AddScoped<IRepositoryBase<Dish>, RepositoryBase<Dish>>();
+        services.AddScoped<IRepositoryBase<Order>, RepositoryBase<Order>>();
+        services.AddScoped<IRepositoryBase<OrderItem>, RepositoryBase<OrderItem>>();
 
         return services;
     }

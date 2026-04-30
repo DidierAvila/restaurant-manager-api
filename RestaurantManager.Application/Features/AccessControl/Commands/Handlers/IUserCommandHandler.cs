@@ -9,8 +9,9 @@ public interface IUserCommandHandler
     Task<UserDto> UpdateUser(Guid id, UpdateUserDto command, CancellationToken cancellationToken);
     Task<bool> DeleteUser(Guid id, CancellationToken cancellationToken);
     Task<bool> ChangePassword(Guid userId, ChangePasswordDto command, CancellationToken cancellationToken);
-    
+
     // Role management methods
+    Task<MultipleRoleAssignmentResult> AssignMultipleRolesToUser(AssignMultipleRolesToUser command, CancellationToken cancellationToken);
     Task<MultipleRoleRemovalResult> RemoveMultipleRolesFromUser(RemoveMultipleRolesFromUser command, CancellationToken cancellationToken);
     Task<List<UserRoleDto>> GetUserRoles(Guid userId, CancellationToken cancellationToken);
     

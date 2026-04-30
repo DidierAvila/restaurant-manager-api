@@ -4,6 +4,7 @@ using RestaurantManager.Domain.Entities.AccessControl;
 using RestaurantManager.Domain.Repositories;
 using RestaurantManager.Domain.Repositories.AccessControl;
 using System.Text.Json;
+using Menu = RestaurantManager.Domain.Entities.AccessControl.Menu;
 
 namespace RestaurantManager.Application.Features.AccessControl.Queries.UserMe;
 
@@ -11,6 +12,7 @@ public class GetUserMe
 {
     private readonly IRepositoryBase<User> _userRepository;
     private readonly IRepositoryBase<Role> _roleRepository;
+    private readonly IRepositoryBase<UserType> _userTypeRepository;
     private readonly IUserRoleRepository _userRoleRepository;
     private readonly IRolePermissionRepository _rolePermissionRepository;
     private readonly IMenuRepository _menuRepository;
@@ -19,6 +21,7 @@ public class GetUserMe
     public GetUserMe(
         IRepositoryBase<User> userRepository,
         IRepositoryBase<Role> roleRepository,
+        IRepositoryBase<UserType> userTypeRepository,
         IUserRoleRepository userRoleRepository,
         IRolePermissionRepository rolePermissionRepository,
         IMenuRepository menuRepository,
@@ -26,6 +29,7 @@ public class GetUserMe
     {
         _userRepository = userRepository;
         _roleRepository = roleRepository;
+        _userTypeRepository = userTypeRepository;
         _userRoleRepository = userRoleRepository;
         _rolePermissionRepository = rolePermissionRepository;
         _menuRepository = menuRepository;
@@ -60,7 +64,20 @@ public class GetUserMe
         // Obtener roles del usuario (solo activos)
         var userRoles = await GetUserRolesOptimizedAsync(userId, cancellationToken);
 
+        // Obtener configuración personalizada del portal desde UserType
+        var userType = await _userTypeRepository.GetByID(user.UserTypeId, cancellationToken);
         UserTypeDto? portalConfigDto = null;
+
+        if (userType != null)
+        {
+            // Crear DTO de configuración a partir de UserType
+            portalConfigDto = _mapper.Map<UserTypeDto>(userType);
+        }
+        else
+        {
+            // Generar configuración automática desde la BD si no existe
+            portalConfigDto = await GenerateDefaultPortalConfigAsync(user.UserTypeId, userRoles, cancellationToken);
+        }
 
         // Crear respuesta en formato híbrido
         return new UserMeResponseDto
@@ -81,7 +98,65 @@ public class GetUserMe
         };
     }
 
+    /// <summary>
+    /// Genera una configuración de portal por defecto basada en los menús y permisos disponibles en la BD
+    /// y la guarda en la base de datos
+    /// </summary>
+    private async Task<UserTypeDto> GenerateDefaultPortalConfigAsync(Guid userTypeId, List<UserRoleDto> userRoles, CancellationToken cancellationToken)
+    {
+        // Obtener todos los permisos del usuario basados en sus roles
+        var userPermissionIds = await GetUserPermissionIdsAsync(userRoles, cancellationToken);
 
+        // Obtener menús disponibles basados en los permisos del usuario
+        var availableMenus = await GetMenusForPermissionsAsync(userPermissionIds, cancellationToken);
+
+        // Construir la navegación jerárquica
+        var navigation = BuildNavigationFromMenus(availableMenus);
+
+        // Crear la configuración adicional con los menús
+        var additionalConfig = new
+        {
+            menus = navigation
+        };
+
+        // Obtener el UserType existente
+        var userType = await _userTypeRepository.GetByID(userTypeId, cancellationToken);
+
+        if (userType != null)
+        {
+            // Actualizar el UserType con la configuración por defecto
+            userType.Theme = "default";
+            userType.DefaultLandingPage = "/dashboard";
+            userType.Language = "es";
+            userType.AdditionalConfig = System.Text.Json.JsonSerializer.Serialize(additionalConfig);
+            userType.UpdatedAt = DateTime.Now;
+
+            // Guardar los cambios
+            await _userTypeRepository.Update(userType, cancellationToken);
+
+            // Crear DTO de configuración
+            return _mapper.Map<UserTypeDto>(userType);
+        }
+
+        // Si no existe el UserType, devolver una configuración por defecto sin guardar
+        // Crear un UserType por defecto
+        var defaultUserType = new UserType
+        {
+            Id = userTypeId,
+            Name = "Default",
+            Description = "Default user type",
+            Status = true,
+            Theme = "default",
+            DefaultLandingPage = "/dashboard",
+            LogoUrl = "/images/logo.png",
+            Language = "es",
+            AdditionalConfig = System.Text.Json.JsonSerializer.Serialize(additionalConfig),
+            CreatedAt = DateTime.Now,
+            UpdatedAt = DateTime.Now
+        };
+
+        return _mapper.Map<UserTypeDto>(defaultUserType);
+    }
 
     /// <summary>
     /// Método optimizado para obtener roles del usuario usando UserRoleRepository

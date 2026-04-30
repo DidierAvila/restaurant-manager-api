@@ -75,7 +75,7 @@ public class TokenCommand : ITokenCommand
             new(CustomClaimTypes.UserName, user.Name),
             new(CustomClaimTypes.UserEmail, user.Email),
             new(CustomClaimTypes.UserTypeId, user.UserTypeId.ToString()),
-            new(CustomClaimTypes.UserTypeName, user.UserType!),
+            new(CustomClaimTypes.UserTypeName, user.UserType!.Name!),
         };
 
         // Agregar permisos como claims

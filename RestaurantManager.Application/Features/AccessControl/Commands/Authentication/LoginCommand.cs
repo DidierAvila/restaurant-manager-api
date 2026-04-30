@@ -11,15 +11,18 @@ public class LoginCommand : ILoginCommand
 {
     private readonly IRepositoryBase<User> _userRepository;
     private readonly ITokenCommand _tokenCommand;
+    private readonly IRepositoryBase<UserType> _userTypeRepository;
     private readonly ILogger<LoginCommand> _logger;
 
     public LoginCommand(
         IRepositoryBase<User> userRepository, 
-        ILogger<LoginCommand> logger, 
+        ILogger<LoginCommand> logger,
+        IRepositoryBase<UserType> userTypeRepository,
         ITokenCommand tokenCommand) 
     {
         _userRepository = userRepository;
         _logger = logger;
+        _userTypeRepository = userTypeRepository;
         _tokenCommand = tokenCommand;
     }
 
@@ -28,7 +31,7 @@ public class LoginCommand : ILoginCommand
         // Buscar usuario solo por email
         User? CurrentUser = await _userRepository.Find(x => x.Email == autorizacion.Email, cancellationToken);
 
-        if (CurrentUser == null || !CurrentUser!.Status)
+        if (CurrentUser == null || CurrentUser.Status != true)
         {
             throw new UnauthorizedAccessException("Usuario inactivo. Contacte al administrador.");
         }
@@ -39,7 +42,7 @@ public class LoginCommand : ILoginCommand
             bool isPasswordValid = BC.Verify(autorizacion.Password, CurrentUser.Password);
             if (isPasswordValid)
             {
-                CurrentUser.UserType = "Admin";
+                CurrentUser.UserType = await _userTypeRepository.Find(x => x.Id == CurrentUser.UserTypeId, cancellationToken);
                 _logger.LogInformation("Login: success");
                 string CurrentToken = await _tokenCommand.GetToken(CurrentUser, cancellationToken);
                 LoginResponseDto loginResponse = new()

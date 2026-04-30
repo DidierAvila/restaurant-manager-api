@@ -125,9 +125,4 @@ public class RepositoryBase<TEntity> : IRepositoryBase<TEntity> where TEntity : 
         _context.Entry(entity).State = EntityState.Modified;
         await _context.SaveChangesAsync(cancellationToken);
     }
-
-    public void GetByIdAsync(Guid userId)
-    {
-        throw new NotImplementedException();
-    }
 }

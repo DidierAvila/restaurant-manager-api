@@ -139,4 +139,63 @@ public class UserCommandHandler : IUserCommandHandler
 
         return roles.OrderBy(r => r.Name).ToList();
     }
+
+    /// <summary>
+    /// Asignar múltiples roles a un usuario
+    /// </summary>
+    public async Task<MultipleRoleAssignmentResult> AssignMultipleRolesToUser(AssignMultipleRolesToUser command, CancellationToken cancellationToken)
+    {
+        var result = new MultipleRoleAssignmentResult();
+
+        foreach (var roleId in command.RoleIds)
+        {
+            try
+            {
+                // Verificar si el rol existe y está activo
+                var role = await _roleRepository.Find(r => r.Id == roleId, cancellationToken);
+                if (role == null || !role.Status)
+                {
+                    result.FailedRoles.Add($"Role {roleId} not found or inactive");
+                    continue;
+                }
+
+                // Verificar si ya está asignado
+                var isAlreadyAssigned = await _userRoleRepository.UserHasRoleAsync(command.UserId, roleId, cancellationToken);
+                if (isAlreadyAssigned)
+                {
+                    result.ExistingRoles.Add(new UserRoleDto
+                    {
+                        Id = role.Id,
+                        Name = role.Name,
+                        Description = role.Description,
+                        Status = role.Status
+                    });
+                    continue;
+                }
+
+                // Asignar el rol
+                var assigned = await _userRoleRepository.AssignRoleToUserAsync(command.UserId, roleId, cancellationToken);
+                if (assigned)
+                {
+                    result.AssignedRoles.Add(new UserRoleDto
+                    {
+                        Id = role.Id,
+                        Name = role.Name,
+                        Description = role.Description,
+                        Status = role.Status
+                    });
+                }
+                else
+                {
+                    result.FailedRoles.Add($"Failed to assign role {roleId}");
+                }
+            }
+            catch (Exception ex)
+            {
+                result.FailedRoles.Add($"Error assigning role {roleId}: {ex.Message}");
+            }
+        }
+
+        return result;
+    }
 }
