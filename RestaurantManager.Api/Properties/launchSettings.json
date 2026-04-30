@@ -17,6 +17,15 @@
       },
       "dotnetRunMessages": true,
       "applicationUrl": "https://localhost:7044;http://localhost:5018"
+    },
+    "docker": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ConnectionStrings__DefaultConnection": "Host=localhost; Port=5433; Database=restaurant_manager; Username=postgres; Password=admin"
+      },
+      "dotnetRunMessages": true,
+      "applicationUrl": "http://localhost:5018"
     }
   },
   "$schema": "https://json.schemastore.org/launchsettings.json"

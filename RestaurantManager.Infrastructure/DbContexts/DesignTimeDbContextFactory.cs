@@ -14,6 +14,7 @@ namespace RestaurantManager.Infrastructure.DbContexts
             IConfigurationRoot configuration = new ConfigurationBuilder()
                 .SetBasePath(Path.Combine(Directory.GetCurrentDirectory(), "../RestaurantManager.Api"))
                 .AddJsonFile("appsettings.json")
+                .AddEnvironmentVariables()
                 .Build();
 
             var connectionString = configuration.GetConnectionString("DefaultConnection");
