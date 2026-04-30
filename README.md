@@ -211,7 +211,7 @@ Actualiza `appsettings.json` con tu cadena de conexión:
 ```json
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Host=localhost;Database=signosst;Username=postgres;Password=admin"
+    "DefaultConnection": "Host=localhost; Port=5432; Database=restaurant_manager; Username=postgres; Password=admin"
   },
   "JwtSettings": {
     "key": "tu-clave-secreta-super-segura-aqui"
@@ -246,26 +246,112 @@ dotnet build
 
 ---
 
+## 🧑‍💻 Desarrollo local (paso a paso)
+
+### 1) Base de datos
+
+Elige una opción:
+
+**Opción A: PostgreSQL local (puerto 5432)**
+
+- Asegura que Postgres esté corriendo en `localhost:5432`.
+- Crea la base de datos `restaurant_manager` (o ajusta la cadena de conexión).
+- Configura la cadena en `RestaurantManager.Api/appsettings.json`:
+
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost; Port=5432; Database=restaurant_manager; Username=postgres; Password=admin"
+  }
+}
+```
+
+**Opción B: PostgreSQL en Docker (puerto 5433)**
+
+```bash
+docker compose up -d db
+```
+
+### 2) Ejecutar migraciones
+
+**Local (5432):**
+
+```bash
+dotnet ef database update --project RestaurantManager.Infrastructure --startup-project RestaurantManager.Api --context RestaurantManagerDbContext
+```
+
+**Docker (5433, PowerShell):**
+
+```powershell
+$env:ConnectionStrings__DefaultConnection='Host=localhost; Port=5433; Database=restaurant_manager; Username=postgres; Password=admin'
+dotnet ef database drop --project RestaurantManager.Infrastructure --startup-project RestaurantManager.Api --context RestaurantManagerDbContext --force
+dotnet ef database update --project RestaurantManager.Infrastructure --startup-project RestaurantManager.Api --context RestaurantManagerDbContext
+```
+
+### 3) Ejecutar la API
+
+**Local:**
+
+```bash
+cd RestaurantManager.Api
+dotnet run
+```
+
+**Docker (con perfil de lanzamiento):**
+
+```bash
+cd RestaurantManager.Api
+dotnet run --launch-profile docker
+```
+
+### 4) Validar que quedó OK
+
+- Swagger: `https://localhost:7044/swagger`
+- Tablas seed esperadas: `menu_items` (25), `orders` (3), `order_details` (4)
+
+---
+
 ## 🗄️ Migraciones de Base de Datos
 
 ### Crear migración (si modificas el modelo)
 
 ```bash
-cd RestaurantManager.Infrastructure
-dotnet ef migrations add NombreDeLaMigracion --startup-project ../RestaurantManager.Api --context RestaurantManagerDbContext
+dotnet ef migrations add NombreDeLaMigracion --project RestaurantManager.Infrastructure --startup-project RestaurantManager.Api --context RestaurantManagerDbContext
 ```
 
-### Aplicar migraciones a la base de datos
+### Aplicar migraciones (Postgres local en 5432)
 
 ```bash
-cd RestaurantManager.Infrastructure
-dotnet ef database update --startup-project ../RestaurantManager.Api
+dotnet ef database update --project RestaurantManager.Infrastructure --startup-project RestaurantManager.Api --context RestaurantManagerDbContext
 ```
 
-### Ver historial de migraciones
+### Aplicar migraciones (Postgres en Docker en 5433)
+
+Levantar la DB:
 
 ```bash
-dotnet ef migrations list --startup-project ../RestaurantManager.Api
+docker compose up -d db
+```
+
+Ejecutar migraciones apuntando al puerto 5433 (PowerShell):
+
+```powershell
+$env:ConnectionStrings__DefaultConnection='Host=localhost; Port=5433; Database=restaurant_manager; Username=postgres; Password=admin'
+dotnet ef database drop --project RestaurantManager.Infrastructure --startup-project RestaurantManager.Api --context RestaurantManagerDbContext --force
+dotnet ef database update --project RestaurantManager.Infrastructure --startup-project RestaurantManager.Api --context RestaurantManagerDbContext
+```
+
+Alternativa: correr la API usando el perfil `docker` (ya configura `ConnectionStrings__DefaultConnection`):
+
+```bash
+cd RestaurantManager.Api
+dotnet run --launch-profile docker
+```
+
+### Ver historial de migraciones (DB configurada por ConnectionStrings__DefaultConnection)
+
+```bash
+dotnet ef migrations list --project RestaurantManager.Infrastructure --startup-project RestaurantManager.Api --context RestaurantManagerDbContext
 ```
 
 ---
@@ -280,9 +366,9 @@ dotnet run
 ```
 
 La API estará disponible en:
-- **HTTP:** `http://localhost:5000`
-- **HTTPS:** `https://localhost:5001`
-- **Swagger UI:** `https://localhost:5001/swagger`
+- **HTTP:** `http://localhost:5018`
+- **HTTPS:** `https://localhost:7044`
+- **Swagger UI:** `https://localhost:7044/swagger`
 
 ### CORS Configurado
 

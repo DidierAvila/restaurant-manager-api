@@ -17,9 +17,6 @@ builder.Services.AddMediatR(cfg => {
     cfg.RegisterServicesFromAssembly(typeof(RestaurantManager.Application.Features.AccessControl.Commands.Users.CreateUserCommand).Assembly);
 });
 
-// Configure AutoMapper
-builder.Services.AddAutoMapper(typeof(RestaurantManager.Application.Features.AccessControl.Commands.Users.CreateUserCommand).Assembly);
-
 // Configure Swagger/OpenAPI
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -60,7 +57,7 @@ builder.Services.AddSwaggerGen(c =>
 
 // Configure CORS
 var allowedOrigins = builder.Configuration.GetSection("CorsSettings:AllowedOrigins").Get<string[]>()
-                     ?? new[] { "http://localhost:30001" };
+                     ?? new[] { "http://localhost:3001" };
 
 builder.Services.AddCors(options =>
 {
@@ -70,13 +67,6 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
-    });
-
-    options.AddPolicy("DevelopmentCors", policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyHeader()
-              .AllowAnyMethod();
     });
 });
 
@@ -101,6 +91,13 @@ builder.Services.AddApiExtention();
 // Configure JWT Authentication
 var key = builder.Configuration.GetValue<string>("JwtSettings:key");
 var keyBytes = Encoding.UTF8.GetBytes(key!);
+var issuer = builder.Configuration.GetValue<string>("JwtSettings:Issuer");
+var audience = builder.Configuration.GetValue<string>("JwtSettings:Audience");
+
+if (string.IsNullOrWhiteSpace(issuer) || string.IsNullOrWhiteSpace(audience))
+{
+    throw new InvalidOperationException("JwtSettings:Issuer y JwtSettings:Audience deben estar configurados.");
+}
 
 builder.Services.AddAuthentication(options =>
 {
@@ -115,8 +112,10 @@ builder.Services.AddAuthentication(options =>
     {
         ValidateIssuerSigningKey = true,
         IssuerSigningKey = new SymmetricSecurityKey(keyBytes),
-        ValidateIssuer = false,
-        ValidateAudience = false,
+        ValidateIssuer = true,
+        ValidIssuer = issuer,
+        ValidateAudience = true,
+        ValidAudience = audience,
         ValidateLifetime = true,
         ClockSkew = TimeSpan.Zero
     };

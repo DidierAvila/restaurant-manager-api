@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using RestaurantManager.Application.Utils;
@@ -86,9 +86,11 @@ public class TokenCommand : ITokenCommand
 
         // Crear el token
         DateTime ExperiredDate = DateTime.Now.AddMinutes(60);
+        var issuer = _configuration.GetValue<string>("JwtSettings:Issuer");
+        var audience = _configuration.GetValue<string>("JwtSettings:Audience");
         JwtSecurityToken tokenJwt = new(
-            _configuration["Jwt:Issuer"],
-            _configuration["Jwt:Audience"],
+            issuer,
+            audience,
             claims,
             expires: ExperiredDate,
             signingCredentials: credentials
