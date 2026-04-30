@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -18,9 +18,19 @@ namespace RestaurantManager.Infrastructure.Migrations
             migrationBuilder.EnsureSchema(
                 name: "accesscontrol");
 
-            migrationBuilder.AlterDatabase()
-                .Annotation("Npgsql:Enum:public.categoria_menu", "Entradas,PlatosFuertes,Sopas,Bebidas,Postres")
-                .Annotation("Npgsql:Enum:public.order_status", "Abierto,EnPreparacion,Listo,Entregado,Cerrado");
+            migrationBuilder.Sql(@"
+                DO $$ BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'categoria_menu' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public')) THEN
+                        CREATE TYPE public.categoria_menu AS ENUM ('Entradas', 'PlatosFuertes', 'Sopas', 'Bebidas', 'Postres');
+                    END IF;
+                END $$;
+                
+                DO $$ BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'order_status' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public')) THEN
+                        CREATE TYPE public.order_status AS ENUM ('Abierto', 'EnPreparacion', 'Listo', 'Entregado', 'Cerrado');
+                    END IF;
+                END $$;
+            ");
 
             migrationBuilder.CreateTable(
                 name: "menu_items",

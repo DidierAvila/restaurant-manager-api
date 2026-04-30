@@ -1,16 +1,18 @@
 using MediatR;
 using RestaurantManager.Application.DTOs.Orders;
 using RestaurantManager.Application.Features.Orders.Commands;
+using RestaurantManager.Domain.Common;
 using RestaurantManager.Domain.Entities;
+using RestaurantManager.Domain.Errors;
 using RestaurantManager.Domain.Repositories;
 
 namespace RestaurantManager.Application.Features.Orders.Handlers
 {
     public class OrderCommandHandler :
-        IRequestHandler<CreateOrderCommand, OrderDto>,
-        IRequestHandler<AddOrderItemCommand, OrderDto>,
-        IRequestHandler<RemoveOrderItemCommand, OrderDto>,
-        IRequestHandler<AdvanceOrderStatusCommand, OrderDto>
+        IRequestHandler<CreateOrderCommand, Result<OrderDto>>,
+        IRequestHandler<AddOrderItemCommand, Result<OrderDto>>,
+        IRequestHandler<RemoveOrderItemCommand, Result<OrderDto>>,
+        IRequestHandler<AdvanceOrderStatusCommand, Result<OrderDto>>
     {
         private readonly IRepositoryBase<Order> _orderRepository;
         private readonly IRepositoryBase<OrderItem> _orderItemRepository;
@@ -26,18 +28,18 @@ namespace RestaurantManager.Application.Features.Orders.Handlers
             _dishRepository = dishRepository;
         }
 
-        public async Task<OrderDto> Handle(CreateOrderCommand request, CancellationToken cancellationToken)
+        public async Task<Result<OrderDto>> Handle(CreateOrderCommand request, CancellationToken cancellationToken)
         {
             // Validar número de mesa
-            if (request.TableNumber <= 0 || request.TableNumber > 50)
+            if (request.TableNumber <= 0)
             {
-                throw new Exception("Número de mesa inválido (1-50)");
+                return Result.Failure<OrderDto>(OrderErrors.InvalidTableNumber());
             }
 
             // Validar mesero
             if (string.IsNullOrWhiteSpace(request.Waiter))
             {
-                throw new Exception("El nombre del mesero es obligatorio");
+                return Result.Failure<OrderDto>(OrderErrors.InvalidWaiter());
             }
 
             // Verificar que no haya un pedido abierto en esa mesa
@@ -49,7 +51,7 @@ namespace RestaurantManager.Application.Features.Orders.Handlers
 
             if (existingOrders != null && existingOrders.Any())
             {
-                throw new Exception($"Ya hay un pedido abierto en la mesa {request.TableNumber}. Ciérralo primero.");
+                return Result.Failure<OrderDto>(OrderErrors.TableAlreadyHasActiveOrder(request.TableNumber));
             }
 
             var order = new Order
@@ -61,35 +63,41 @@ namespace RestaurantManager.Application.Features.Orders.Handlers
             };
 
             var createdOrder = await _orderRepository.Create(order, cancellationToken);
+            var orderDto = await MapToDtoWithItems(createdOrder, cancellationToken);
 
-            return await MapToDtoWithItems(createdOrder, cancellationToken);
+            return Result.Success(orderDto);
         }
 
-        public async Task<OrderDto> Handle(AddOrderItemCommand request, CancellationToken cancellationToken)
+        public async Task<Result<OrderDto>> Handle(AddOrderItemCommand request, CancellationToken cancellationToken)
         {
             // Validar cantidad
-            if (request.Quantity <= 0 || request.Quantity > 20)
+            if (request.Quantity <= 0)
             {
-                throw new Exception("Cantidad inválida (1-20)");
+                return Result.Failure<OrderDto>(OrderErrors.InvalidQuantity());
             }
 
             var order = await _orderRepository.GetByID(request.OrderId, cancellationToken);
             if (order == null)
             {
-                throw new Exception($"Pedido con ID {request.OrderId} no encontrado");
+                return Result.Failure<OrderDto>(OrderErrors.NotFound(request.OrderId));
             }
 
             // Verificar que el pedido siga abierto
             if (order.Status != OrderStatus.Abierto)
             {
-                throw new Exception("Solo se pueden agregar platos a pedidos en estado 'Abierto'");
+                return Result.Failure<OrderDto>(OrderErrors.CannotEditClosedOrder());
             }
 
             // Verificar que el plato exista y esté disponible
             var dish = await _dishRepository.GetByID(request.DishId, cancellationToken);
             if (dish == null)
             {
-                throw new Exception($"Plato con ID {request.DishId} no encontrado");
+                return Result.Failure<OrderDto>(DishErrors.NotFound(request.DishId));
+            }
+
+            if (!dish.IsAvailable)
+            {
+                return Result.Failure<OrderDto>(OrderErrors.DishNotAvailable(dish.Name));
             }
 
             // Verificar si ya existe ese plato en el pedido
@@ -118,34 +126,41 @@ namespace RestaurantManager.Application.Features.Orders.Handlers
                 await _orderItemRepository.Create(orderItem, cancellationToken);
             }
 
-            return await MapToDtoWithItems(order, cancellationToken);
+            var orderDto = await MapToDtoWithItems(order, cancellationToken);
+            return Result.Success(orderDto);
         }
 
-        public async Task<OrderDto> Handle(RemoveOrderItemCommand request, CancellationToken cancellationToken)
+        public async Task<Result<OrderDto>> Handle(RemoveOrderItemCommand request, CancellationToken cancellationToken)
         {
             var order = await _orderRepository.GetByID(request.OrderId, cancellationToken);
             if (order == null)
             {
-                throw new Exception($"Pedido con ID {request.OrderId} no encontrado");
+                return Result.Failure<OrderDto>(OrderErrors.NotFound(request.OrderId));
+            }
+
+            if (order.Status != OrderStatus.Abierto)
+            {
+                return Result.Failure<OrderDto>(OrderErrors.CannotEditClosedOrder());
             }
 
             var orderItem = await _orderItemRepository.GetByID(request.OrderItemId, cancellationToken);
             if (orderItem == null || orderItem.OrderId != request.OrderId)
             {
-                throw new Exception($"Item de pedido con ID {request.OrderItemId} no encontrado");
+                return Result.Failure<OrderDto>(OrderErrors.OrderItemNotFound(request.OrderItemId));
             }
 
             await _orderItemRepository.Delete(orderItem, cancellationToken);
+            var orderDto = await MapToDtoWithItems(order, cancellationToken);
 
-            return await MapToDtoWithItems(order, cancellationToken);
+            return Result.Success(orderDto);
         }
 
-        public async Task<OrderDto> Handle(AdvanceOrderStatusCommand request, CancellationToken cancellationToken)
+        public async Task<Result<OrderDto>> Handle(AdvanceOrderStatusCommand request, CancellationToken cancellationToken)
         {
             var order = await _orderRepository.GetByID(request.OrderId, cancellationToken);
             if (order == null)
             {
-                throw new Exception($"Pedido con ID {request.OrderId} no encontrado");
+                return Result.Failure<OrderDto>(OrderErrors.NotFound(request.OrderId));
             }
 
             // Máquina de estados
@@ -155,8 +170,13 @@ namespace RestaurantManager.Application.Features.Orders.Handlers
                 OrderStatus.EnPreparacion => OrderStatus.Listo,
                 OrderStatus.Listo => OrderStatus.Entregado,
                 OrderStatus.Entregado => OrderStatus.Cerrado,
-                _ => throw new Exception($"El pedido ya está cerrado")
+                _ => (OrderStatus?)null
             };
+
+            if (newStatus == null)
+            {
+                return Result.Failure<OrderDto>(OrderErrors.CannotAdvanceStatus());
+            }
 
             // Si está en Abierto, verificar que tenga platos
             if (order.Status == OrderStatus.Abierto)
@@ -167,14 +187,15 @@ namespace RestaurantManager.Application.Features.Orders.Handlers
 
                 if (items == null || !items.Any())
                 {
-                    throw new Exception("No se puede avanzar un pedido sin platos");
+                    return Result.Failure<OrderDto>(OrderErrors.OrderHasNoItems());
                 }
             }
 
-            order.Status = newStatus;
+            order.Status = newStatus.Value;
             await _orderRepository.Update(order, cancellationToken);
+            var orderDto = await MapToDtoWithItems(order, cancellationToken);
 
-            return await MapToDtoWithItems(order, cancellationToken);
+            return Result.Success(orderDto);
         }
 
         private async Task<OrderDto> MapToDtoWithItems(Order order, CancellationToken cancellationToken)

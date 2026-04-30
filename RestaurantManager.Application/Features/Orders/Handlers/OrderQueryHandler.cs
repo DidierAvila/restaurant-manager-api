@@ -14,7 +14,8 @@ namespace RestaurantManager.Application.Features.Orders.Handlers
         IRequestHandler<GetAllOrdersQuery, PaginationResponseDto<OrderSummaryDto>>,
         IRequestHandler<GetOrderByIdQuery, OrderDto?>,
         IRequestHandler<GetActiveOrdersQuery, List<OrderSummaryDto>>,
-        IRequestHandler<GetOrderByTableQuery, OrderDto?>
+        IRequestHandler<GetOrderByTableQuery, OrderDto?>,
+        IRequestHandler<GetOrderItemsByOrderIdQuery, List<OrderItemDto>?>
     {
         private readonly IRepositoryBase<Order> _orderRepository;
         private readonly IRepositoryBase<OrderItem> _orderItemRepository;
@@ -166,10 +167,36 @@ namespace RestaurantManager.Application.Features.Orders.Handlers
             return await MapToDtoWithItems(order, cancellationToken);
         }
 
+        public async Task<List<OrderItemDto>?> Handle(GetOrderItemsByOrderIdQuery request, CancellationToken cancellationToken)
+        {
+            var order = await _orderRepository.GetByID(request.OrderId, cancellationToken);
+            if (order == null)
+                return null;
+
+            return await GetOrderItemDtos(order.Id, cancellationToken);
+        }
+
         private async Task<OrderDto> MapToDtoWithItems(Order order, CancellationToken cancellationToken)
         {
+            var items = await GetOrderItemDtos(order.Id, cancellationToken);
+
+            return new OrderDto
+            {
+                Id = order.Id,
+                TableNumber = order.TableNumber,
+                Waiter = order.Waiter,
+                OrderDate = order.OrderDate,
+                Status = order.Status.ToString(),
+                StatusEnum = order.Status,
+                Total = items.Sum(i => i.Subtotal),
+                Items = items
+            };
+        }
+
+        private async Task<List<OrderItemDto>> GetOrderItemDtos(int orderId, CancellationToken cancellationToken)
+        {
             var orderItems = await _orderItemRepository.Finds(
-                oi => oi.OrderId == order.Id,
+                oi => oi.OrderId == orderId,
                 cancellationToken);
 
             var items = new List<OrderItemDto>();
@@ -193,17 +220,7 @@ namespace RestaurantManager.Application.Features.Orders.Handlers
                 }
             }
 
-            return new OrderDto
-            {
-                Id = order.Id,
-                TableNumber = order.TableNumber,
-                Waiter = order.Waiter,
-                OrderDate = order.OrderDate,
-                Status = order.Status.ToString(),
-                StatusEnum = order.Status,
-                Total = items.Sum(i => i.Subtotal),
-                Items = items
-            };
+            return items;
         }
     }
 }

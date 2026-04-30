@@ -10,10 +10,9 @@ namespace RestaurantManager.Api.Controllers
     /// <summary>
     /// Controlador para la gestión de pedidos del restaurante
     /// </summary>
-    [ApiController]
     [Route("api/[controller]")]
     [Produces("application/json")]
-    public class OrdersController : ControllerBase
+    public class OrdersController : ApiControllerBase
     {
         private readonly IMediator _mediator;
 
@@ -51,6 +50,21 @@ namespace RestaurantManager.Api.Controllers
         }
 
         /// <summary>
+        /// Obtener detalle de items de un pedido por ID del pedido
+        /// </summary>
+        [HttpGet("{orderId}/items")]
+        public async Task<ActionResult<List<OrderItemDto>>> GetItemsByOrderId(int orderId, CancellationToken cancellationToken)
+        {
+            var query = new GetOrderItemsByOrderIdQuery { OrderId = orderId };
+            var items = await _mediator.Send(query, cancellationToken);
+
+            if (items == null)
+                return NotFound(new { message = $"Pedido con ID {orderId} no encontrado" });
+
+            return Ok(items);
+        }
+
+        /// <summary>
         /// Obtener pedidos activos (no entregados ni cerrados)
         /// </summary>
         [HttpGet("active")]
@@ -80,83 +94,61 @@ namespace RestaurantManager.Api.Controllers
         /// Crear nuevo pedido
         /// </summary>
         [HttpPost]
-        public async Task<ActionResult<OrderDto>> Create([FromBody] CreateOrderCommand command)
+        public async Task<IActionResult> Create([FromBody] CreateOrderCommand command)
         {
-            try
+            var result = await _mediator.Send(command);
+
+            if (result.IsSuccess)
             {
-                var order = await _mediator.Send(command);
-                return CreatedAtAction(nameof(GetById), new { id = order.Id }, order);
+                return CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value);
             }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
+
+            return HandleError(result.Error);
         }
 
         /// <summary>
         /// Agregar plato a un pedido
         /// </summary>
         [HttpPost("{orderId}/items")]
-        public async Task<ActionResult<OrderDto>> AddItem(int orderId, [FromBody] AddOrderItemDto dto)
+        public async Task<IActionResult> AddItem(int orderId, [FromBody] AddOrderItemDto dto)
         {
-            try
+            var command = new AddOrderItemCommand
             {
-                var command = new AddOrderItemCommand
-                {
-                    OrderId = orderId,
-                    DishId = dto.DishId,
-                    Quantity = dto.Quantity,
-                    Notes = dto.Notes
-                };
+                OrderId = orderId,
+                DishId = dto.DishId,
+                Quantity = dto.Quantity,
+                Notes = dto.Notes
+            };
 
-                var order = await _mediator.Send(command);
-                return Ok(order);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
+            var result = await _mediator.Send(command);
+            return HandleResult(result);
         }
 
         /// <summary>
         /// Quitar plato de un pedido
         /// </summary>
         [HttpDelete("{orderId}/items/{itemId}")]
-        public async Task<ActionResult<OrderDto>> RemoveItem(int orderId, int itemId)
+        public async Task<IActionResult> RemoveItem(int orderId, int itemId)
         {
-            try
+            var command = new RemoveOrderItemCommand
             {
-                var command = new RemoveOrderItemCommand
-                {
-                    OrderId = orderId,
-                    OrderItemId = itemId
-                };
+                OrderId = orderId,
+                OrderItemId = itemId
+            };
 
-                var order = await _mediator.Send(command);
-                return Ok(order);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
+            var result = await _mediator.Send(command);
+            return HandleResult(result);
         }
 
         /// <summary>
         /// Avanzar estado del pedido (Abierto → En Preparación → Listo → Entregado → Cerrado)
         /// </summary>
         [HttpPatch("{id}/advance-status")]
-        public async Task<ActionResult<OrderDto>> AdvanceStatus(int id)
+        public async Task<IActionResult> AdvanceStatus(int id)
         {
-            try
-            {
-                var command = new AdvanceOrderStatusCommand { OrderId = id };
-                var order = await _mediator.Send(command);
-                return Ok(order);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
+            var command = new AdvanceOrderStatusCommand { OrderId = id };
+            var result = await _mediator.Send(command);
+            return HandleResult(result);
         }
     }
 }

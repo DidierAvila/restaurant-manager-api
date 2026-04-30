@@ -1,13 +1,17 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using RestaurantManager.Domain.Entities.AccessControl;
 using RestaurantManager.Domain.Entities;
+using RestaurantManager.Domain.Entities.AccessControl;
 
 namespace RestaurantManager.Infrastructure.DbContexts;
 
 public partial class RestaurantManagerDbContext : DbContext
 {
+    static RestaurantManagerDbContext()
+    {
+        AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+    }
+
     public RestaurantManagerDbContext(DbContextOptions<RestaurantManagerDbContext> options)
         : base(options)
     {

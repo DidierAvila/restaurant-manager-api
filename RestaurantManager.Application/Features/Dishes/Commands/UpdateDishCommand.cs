@@ -1,9 +1,10 @@
 using MediatR;
 using RestaurantManager.Application.DTOs.Dishes;
+using RestaurantManager.Domain.Common;
 
 namespace RestaurantManager.Application.Features.Dishes.Commands
 {
-    public class UpdateDishCommand : IRequest<DishDto>
+    public class UpdateDishCommand : IRequest<Result<DishDto>>
     {
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;

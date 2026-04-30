@@ -3,16 +3,18 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using RestaurantManager.Application.DTOs.Dishes;
 using RestaurantManager.Application.Features.Dishes.Commands;
+using RestaurantManager.Domain.Common;
 using RestaurantManager.Domain.Entities;
+using RestaurantManager.Domain.Errors;
 using RestaurantManager.Domain.Repositories;
 
 namespace RestaurantManager.Application.Features.Dishes.Handlers
 {
     public class DishCommandHandler :
-        IRequestHandler<CreateDishCommand, DishDto>,
-        IRequestHandler<UpdateDishCommand, DishDto>,
-        IRequestHandler<DeleteDishCommand, bool>,
-        IRequestHandler<ToggleDishAvailabilityCommand, DishDto>
+        IRequestHandler<CreateDishCommand, Result<DishDto>>,
+        IRequestHandler<UpdateDishCommand, Result<DishDto>>,
+        IRequestHandler<DeleteDishCommand, Result>,
+        IRequestHandler<ToggleDishAvailabilityCommand, Result<DishDto>>
     {
         private readonly IRepositoryBase<Dish> _dishRepository;
         private readonly IRepositoryBase<OrderItem> _orderItemRepository;
@@ -28,7 +30,7 @@ namespace RestaurantManager.Application.Features.Dishes.Handlers
             _mapper = mapper;
         }
 
-        public async Task<DishDto> Handle(CreateDishCommand request, CancellationToken cancellationToken)
+        public async Task<Result<DishDto>> Handle(CreateDishCommand request, CancellationToken cancellationToken)
         {
             // Validar que el nombre no exista
             var existingDish = await _dishRepository.Find(
@@ -37,13 +39,19 @@ namespace RestaurantManager.Application.Features.Dishes.Handlers
 
             if (existingDish != null)
             {
-                throw new Exception($"Ya existe un plato con el nombre '{request.Name}'");
+                return Result.Failure<DishDto>(DishErrors.AlreadyExists(request.Name));
             }
 
             // Validar precio
             if (request.Price <= 0)
             {
-                throw new Exception("El precio debe ser un número mayor a 0");
+                return Result.Failure<DishDto>(DishErrors.InvalidPrice());
+            }
+
+            // Validar nombre
+            if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Length < 3)
+            {
+                return Result.Failure<DishDto>(DishErrors.InvalidName());
             }
 
             var dish = new Dish
@@ -59,15 +67,15 @@ namespace RestaurantManager.Application.Features.Dishes.Handlers
 
             var createdDish = await _dishRepository.Create(dish, cancellationToken);
 
-            return _mapper.Map<DishDto>(createdDish);
+            return Result.Success(_mapper.Map<DishDto>(createdDish));
         }
 
-        public async Task<DishDto> Handle(UpdateDishCommand request, CancellationToken cancellationToken)
+        public async Task<Result<DishDto>> Handle(UpdateDishCommand request, CancellationToken cancellationToken)
         {
             var dish = await _dishRepository.GetByID(request.Id, cancellationToken);
             if (dish == null)
             {
-                throw new Exception($"Plato con ID {request.Id} no encontrado");
+                return Result.Failure<DishDto>(DishErrors.NotFound(request.Id));
             }
 
             // Validar que el nombre no exista (excepto para el mismo plato)
@@ -77,13 +85,19 @@ namespace RestaurantManager.Application.Features.Dishes.Handlers
 
             if (existingDish != null)
             {
-                throw new Exception($"Ya existe un plato con el nombre '{request.Name}'");
+                return Result.Failure<DishDto>(DishErrors.AlreadyExists(request.Name));
             }
 
             // Validar precio
             if (request.Price <= 0)
             {
-                throw new Exception("El precio debe ser un número mayor a 0");
+                return Result.Failure<DishDto>(DishErrors.InvalidPrice());
+            }
+
+            // Validar nombre
+            if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Length < 3)
+            {
+                return Result.Failure<DishDto>(DishErrors.InvalidName());
             }
 
             dish.Name = request.Name;
@@ -95,15 +109,15 @@ namespace RestaurantManager.Application.Features.Dishes.Handlers
 
             await _dishRepository.Update(dish, cancellationToken);
 
-            return _mapper.Map<DishDto>(dish);
+            return Result.Success(_mapper.Map<DishDto>(dish));
         }
 
-        public async Task<bool> Handle(DeleteDishCommand request, CancellationToken cancellationToken)
+        public async Task<Result> Handle(DeleteDishCommand request, CancellationToken cancellationToken)
         {
             var dish = await _dishRepository.GetByID(request.Id, cancellationToken);
             if (dish == null)
             {
-                throw new Exception($"Plato con ID {request.Id} no encontrado");
+                return Result.Failure(DishErrors.NotFound(request.Id));
             }
 
             // Verificar que no tenga pedidos asociados
@@ -113,19 +127,19 @@ namespace RestaurantManager.Application.Features.Dishes.Handlers
 
             if (hasOrders != null)
             {
-                throw new Exception("No se puede eliminar: este plato tiene pedidos asociados. Desactívalo en su lugar.");
+                return Result.Failure(DishErrors.CannotDeleteWithOrders());
             }
 
             await _dishRepository.Delete(request.Id, cancellationToken);
-            return true;
+            return Result.Success();
         }
 
-        public async Task<DishDto> Handle(ToggleDishAvailabilityCommand request, CancellationToken cancellationToken)
+        public async Task<Result<DishDto>> Handle(ToggleDishAvailabilityCommand request, CancellationToken cancellationToken)
         {
             var dish = await _dishRepository.GetByID(request.Id, cancellationToken);
             if (dish == null)
             {
-                throw new Exception($"Plato con ID {request.Id} no encontrado");
+                return Result.Failure<DishDto>(DishErrors.NotFound(request.Id));
             }
 
             dish.IsAvailable = !dish.IsAvailable;
@@ -133,7 +147,7 @@ namespace RestaurantManager.Application.Features.Dishes.Handlers
 
             await _dishRepository.Update(dish, cancellationToken);
 
-            return _mapper.Map<DishDto>(dish);
+            return Result.Success(_mapper.Map<DishDto>(dish));
         }
     }
 }

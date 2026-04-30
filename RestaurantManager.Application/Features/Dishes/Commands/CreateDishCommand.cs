@@ -1,9 +1,10 @@
 using MediatR;
 using RestaurantManager.Application.DTOs.Dishes;
+using RestaurantManager.Domain.Common;
 
 namespace RestaurantManager.Application.Features.Dishes.Commands
 {
-    public class CreateDishCommand : IRequest<DishDto>
+    public class CreateDishCommand : IRequest<Result<DishDto>>
     {
         public string Name { get; set; } = string.Empty;
         public string? Description { get; set; }

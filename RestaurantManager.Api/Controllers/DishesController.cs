@@ -8,8 +8,7 @@ using RestaurantManager.Application.Features.Dishes.Queries;
 namespace RestaurantManager.Api.Controllers
 {
     [Route("api/[controller]")]
-    [ApiController]
-    public class DishesController : ControllerBase
+    public class DishesController : ApiControllerBase
     {
         private readonly IMediator _mediator;
 
@@ -80,73 +79,51 @@ namespace RestaurantManager.Api.Controllers
         /// Crear nuevo plato
         /// </summary>
         [HttpPost]
-        public async Task<ActionResult<DishDto>> Create([FromBody] CreateDishCommand command)
+        public async Task<IActionResult> Create([FromBody] CreateDishCommand command)
         {
-            try
+            var result = await _mediator.Send(command);
+
+            if (result.IsSuccess)
             {
-                var dish = await _mediator.Send(command);
-                return CreatedAtAction(nameof(GetById), new { id = dish.Id }, dish);
+                return CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value);
             }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
+
+            return HandleError(result.Error);
         }
 
         /// <summary>
         /// Actualizar plato
         /// </summary>
         [HttpPut("{id}")]
-        public async Task<ActionResult<DishDto>> Update(int id, [FromBody] UpdateDishCommand command)
+        public async Task<IActionResult> Update(int id, [FromBody] UpdateDishCommand command)
         {
-            try
-            {
-                if (id != command.Id)
-                    return BadRequest(new { message = "El ID del plato no coincide" });
+            if (id != command.Id)
+                return BadRequest(new { message = "El ID del plato no coincide" });
 
-                var dish = await _mediator.Send(command);
-                return Ok(dish);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
+            var result = await _mediator.Send(command);
+            return HandleResult(result);
         }
 
         /// <summary>
         /// Eliminar plato
         /// </summary>
         [HttpDelete("{id}")]
-        public async Task<ActionResult> Delete(int id)
+        public async Task<IActionResult> Delete(int id)
         {
-            try
-            {
-                var command = new DeleteDishCommand { Id = id };
-                var result = await _mediator.Send(command);
-                return Ok(new { message = "Plato eliminado exitosamente" });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
+            var command = new DeleteDishCommand { Id = id };
+            var result = await _mediator.Send(command);
+            return HandleResult(result);
         }
 
         /// <summary>
         /// Cambiar disponibilidad del plato (toggle)
         /// </summary>
         [HttpPatch("{id}/toggle-availability")]
-        public async Task<ActionResult<DishDto>> ToggleAvailability(int id)
+        public async Task<IActionResult> ToggleAvailability(int id)
         {
-            try
-            {
-                var command = new ToggleDishAvailabilityCommand { Id = id };
-                var dish = await _mediator.Send(command);
-                return Ok(dish);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
+            var command = new ToggleDishAvailabilityCommand { Id = id };
+            var result = await _mediator.Send(command);
+            return HandleResult(result);
         }
     }
 }
