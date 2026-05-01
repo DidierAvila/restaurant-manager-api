@@ -1,5 +1,7 @@
 # 🍽️ Restaurant Manager API
 
+Documento de analisis de còdigo legacy /EVALUACION_TECNICA.txt
+
 Sistema de gestión para restaurantes construido con **.NET 10** siguiendo **Clean Architecture** y patrones **CQRS**.
 
 ## 📋 Tabla de Contenidos
