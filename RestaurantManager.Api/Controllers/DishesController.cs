@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using RestaurantManager.Api.Attributes;
 using RestaurantManager.Application.DTOs.Common;
 using RestaurantManager.Application.DTOs.Dishes;
 using RestaurantManager.Application.Features.Dishes.Commands;
@@ -21,6 +22,7 @@ namespace RestaurantManager.Api.Controllers
         /// Obtener todos los platos con paginación y filtros opcionales
         /// </summary>
         [HttpGet]
+        [RequirePermission("dishes.read")]
         public async Task<ActionResult<PaginationResponseDto<DishDto>>> GetAll(
             [FromQuery] DishFilterDto filter,
             CancellationToken cancellationToken)
@@ -38,6 +40,7 @@ namespace RestaurantManager.Api.Controllers
         /// Obtener plato por ID
         /// </summary>
         [HttpGet("{id}")]
+        [RequirePermission("dishes.read")]
         public async Task<ActionResult<DishDto>> GetById(int id)
         {
             var query = new GetDishByIdQuery { Id = id };
@@ -53,6 +56,7 @@ namespace RestaurantManager.Api.Controllers
         /// Obtener platos disponibles
         /// </summary>
         [HttpGet("available")]
+        [RequirePermission("dishes.read")]
         public async Task<ActionResult<List<DishDto>>> GetAvailable()
         {
             var query = new GetAvailableDishesQuery();
@@ -64,6 +68,7 @@ namespace RestaurantManager.Api.Controllers
         /// Obtener platos por categoría
         /// </summary>
         [HttpGet("category/{category}")]
+        [RequirePermission("dishes.read")]
         public async Task<ActionResult<List<DishDto>>> GetByCategory(int category)
         {
             var query = new GetDishesByCategoryQuery
@@ -79,6 +84,7 @@ namespace RestaurantManager.Api.Controllers
         /// Crear nuevo plato
         /// </summary>
         [HttpPost]
+        [RequirePermission("dishes.create")]
         public async Task<IActionResult> Create([FromBody] CreateDishCommand command)
         {
             var result = await _mediator.Send(command);
@@ -95,6 +101,7 @@ namespace RestaurantManager.Api.Controllers
         /// Actualizar plato
         /// </summary>
         [HttpPut("{id}")]
+        [RequirePermission("dishes.update")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateDishCommand command)
         {
             if (id != command.Id)
@@ -108,6 +115,7 @@ namespace RestaurantManager.Api.Controllers
         /// Eliminar plato
         /// </summary>
         [HttpDelete("{id}")]
+        [RequirePermission("dishes.delete")]
         public async Task<IActionResult> Delete(int id)
         {
             var command = new DeleteDishCommand { Id = id };
@@ -119,6 +127,7 @@ namespace RestaurantManager.Api.Controllers
         /// Cambiar disponibilidad del plato (toggle)
         /// </summary>
         [HttpPatch("{id}/toggle-availability")]
+        [RequirePermission("dishes.update")]
         public async Task<IActionResult> ToggleAvailability(int id)
         {
             var command = new ToggleDishAvailabilityCommand { Id = id };

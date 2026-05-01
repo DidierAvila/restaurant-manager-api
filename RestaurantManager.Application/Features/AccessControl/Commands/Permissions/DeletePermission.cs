@@ -1,3 +1,4 @@
+using RestaurantManager.Domain.Common;
 using RestaurantManager.Domain.Entities.AccessControl;
 using RestaurantManager.Domain.Repositories;
 
@@ -12,19 +13,19 @@ public class DeletePermission
         _permissionRepository = permissionRepository;
     }
 
-    public async Task<bool> HandleAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<Result> HandleAsync(Guid id, CancellationToken cancellationToken)
     {
         // Find existing permission
         var permission = await _permissionRepository.Find(x => x.Id == id, cancellationToken);
         if (permission == null)
-            throw new KeyNotFoundException("Permission not found");
+            return Result.Failure(Error.NotFound("Permission.NotFound", "Permission not found"));
 
         // Check if permission has associated roles
         if (permission.Roles?.Any() == true)
-            throw new InvalidOperationException("Cannot delete Permission with associated roles. Please remove the permission from all roles first.");
+            return Result.Failure(Error.Conflict("Permission.HasRoles", "Cannot delete Permission with associated roles. Please remove the permission from all roles first."));
 
         // Delete permission
         await _permissionRepository.Delete(permission, cancellationToken);
-        return true;
+        return Result.Success();
     }
 }

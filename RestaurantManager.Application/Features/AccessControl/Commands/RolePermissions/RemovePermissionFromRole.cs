@@ -1,3 +1,4 @@
+using RestaurantManager.Domain.Common;
 using RestaurantManager.Domain.Repositories.AccessControl;
 
 namespace RestaurantManager.Application.Features.AccessControl.Commands.RolePermissions;
@@ -11,15 +12,15 @@ public class RemovePermissionFromRole
         _rolePermissionRepository = rolePermissionRepository;
     }
 
-    public async Task<bool> HandleAsync(Guid roleId, Guid permissionId, CancellationToken cancellationToken = default)
+    public async Task<Result> HandleAsync(Guid roleId, Guid permissionId, CancellationToken cancellationToken = default)
     {
         var rolePermission = await _rolePermissionRepository.GetByRoleAndPermissionAsync(roleId, permissionId, cancellationToken);
         if (rolePermission == null)
         {
-            throw new KeyNotFoundException($"No se encontró la asignación del permiso al rol especificado");
+            return Result.Failure(Error.NotFound("RolePermission.NotFound", "No se encontró la asignación del permiso al rol especificado"));
         }
 
         await _rolePermissionRepository.RemovePermissionFromRoleAsync(roleId, permissionId, cancellationToken);
-        return true;
+        return Result.Success();
     }
 }

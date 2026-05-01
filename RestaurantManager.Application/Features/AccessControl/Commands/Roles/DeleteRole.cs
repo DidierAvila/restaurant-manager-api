@@ -1,3 +1,4 @@
+using RestaurantManager.Domain.Common;
 using RestaurantManager.Domain.Entities.AccessControl;
 using RestaurantManager.Domain.Repositories;
 
@@ -12,16 +13,16 @@ public class DeleteRole
         _roleRepository = roleRepository;
     }
 
-    public async Task<bool> HandleAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<Result> HandleAsync(Guid id, CancellationToken cancellationToken)
     {
         // Find existing role
         var role = await _roleRepository.Find(x => x.Id == id, cancellationToken);
         if (role == null)
-            throw new KeyNotFoundException("Role not found");
+            return Result.Failure(Error.NotFound("Role.NotFound", "Role not found"));
 
         // Delete role from repository
         await _roleRepository.Delete(role, cancellationToken);
 
-        return true;
+        return Result.Success();
     }
 }

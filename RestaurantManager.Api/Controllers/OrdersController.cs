@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using RestaurantManager.Api.Attributes;
 using RestaurantManager.Application.DTOs.Common;
 using RestaurantManager.Application.DTOs.Orders;
 using RestaurantManager.Application.Features.Orders.Commands;
@@ -25,6 +26,7 @@ namespace RestaurantManager.Api.Controllers
         /// Obtener todos los pedidos con paginación y filtros opcionales
         /// </summary>
         [HttpGet]
+        [RequirePermission("orders.read")]
         public async Task<ActionResult<PaginationResponseDto<OrderSummaryDto>>> GetAll(
             [FromQuery] OrderFilterDto filter,
             CancellationToken cancellationToken)
@@ -38,6 +40,7 @@ namespace RestaurantManager.Api.Controllers
         /// Obtener pedido por ID
         /// </summary>
         [HttpGet("{id}")]
+        [RequirePermission("orders.read")]
         public async Task<ActionResult<OrderDto>> GetById(int id)
         {
             var query = new GetOrderByIdQuery { Id = id };
@@ -53,6 +56,7 @@ namespace RestaurantManager.Api.Controllers
         /// Obtener detalle de items de un pedido por ID del pedido
         /// </summary>
         [HttpGet("{orderId}/items")]
+        [RequirePermission("orders.read")]
         public async Task<ActionResult<List<OrderItemDto>>> GetItemsByOrderId(int orderId, CancellationToken cancellationToken)
         {
             var query = new GetOrderItemsByOrderIdQuery { OrderId = orderId };
@@ -68,6 +72,7 @@ namespace RestaurantManager.Api.Controllers
         /// Obtener pedidos activos (no entregados ni cerrados)
         /// </summary>
         [HttpGet("active")]
+        [RequirePermission("orders.read")]
         public async Task<ActionResult<List<OrderSummaryDto>>> GetActive()
         {
             var query = new GetActiveOrdersQuery();
@@ -79,6 +84,7 @@ namespace RestaurantManager.Api.Controllers
         /// Obtener pedido activo de una mesa
         /// </summary>
         [HttpGet("table/{tableNumber}")]
+        [RequirePermission("orders.read")]
         public async Task<ActionResult<OrderDto>> GetByTable(int tableNumber)
         {
             var query = new GetOrderByTableQuery { TableNumber = tableNumber };
@@ -94,6 +100,7 @@ namespace RestaurantManager.Api.Controllers
         /// Crear nuevo pedido
         /// </summary>
         [HttpPost]
+        [RequirePermission("orders.create")]
         public async Task<IActionResult> Create([FromBody] CreateOrderCommand command)
         {
             var result = await _mediator.Send(command);
@@ -110,6 +117,7 @@ namespace RestaurantManager.Api.Controllers
         /// Agregar plato a un pedido
         /// </summary>
         [HttpPost("{orderId}/items")]
+        [RequirePermission("orders.update")]
         public async Task<IActionResult> AddItem(int orderId, [FromBody] AddOrderItemDto dto)
         {
             var command = new AddOrderItemCommand
@@ -128,6 +136,7 @@ namespace RestaurantManager.Api.Controllers
         /// Quitar plato de un pedido
         /// </summary>
         [HttpDelete("{orderId}/items/{itemId}")]
+        [RequirePermission("orders.update")]
         public async Task<IActionResult> RemoveItem(int orderId, int itemId)
         {
             var command = new RemoveOrderItemCommand
@@ -144,6 +153,7 @@ namespace RestaurantManager.Api.Controllers
         /// Avanzar estado del pedido (Abierto → En Preparación → Listo → Entregado → Cerrado)
         /// </summary>
         [HttpPatch("{id}/advance-status")]
+        [RequirePermission("orders.update")]
         public async Task<IActionResult> AdvanceStatus(int id)
         {
             var command = new AdvanceOrderStatusCommand { OrderId = id };

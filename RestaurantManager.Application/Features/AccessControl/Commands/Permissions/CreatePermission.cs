@@ -1,5 +1,6 @@
 using AutoMapper;
 using RestaurantManager.Application.DTOs.AccessControl;
+using RestaurantManager.Domain.Common;
 using RestaurantManager.Domain.Entities.AccessControl;
 using RestaurantManager.Domain.Repositories;
 
@@ -16,12 +17,12 @@ public class CreatePermission
         _mapper = mapper;
     }
 
-    public async Task<PermissionDto> HandleAsync(CreatePermissionDto createPermissionDto, CancellationToken cancellationToken)
+    public async Task<Result<PermissionDto>> HandleAsync(CreatePermissionDto createPermissionDto, CancellationToken cancellationToken)
     {
         // Validate that the name doesn't already exist
         var existingPermission = await _permissionRepository.Find(x => x.Name == createPermissionDto.Name, cancellationToken);
         if (existingPermission != null)
-            throw new InvalidOperationException("A Permission with this name already exists");
+            return Result.Failure<PermissionDto>(Error.Conflict("Permission.NameExists", "A Permission with this name already exists"));
 
         // Map DTO to Entity using AutoMapper
         var permission = _mapper.Map<Permission>(createPermissionDto);
@@ -30,6 +31,6 @@ public class CreatePermission
         await _permissionRepository.Create(permission, cancellationToken);
 
         // Map Entity back to DTO for return
-        return _mapper.Map<PermissionDto>(permission);
+        return Result.Success(_mapper.Map<PermissionDto>(permission));
     }
 }

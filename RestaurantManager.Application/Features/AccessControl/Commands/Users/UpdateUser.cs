@@ -1,5 +1,6 @@
 using AutoMapper;
 using RestaurantManager.Application.DTOs.AccessControl;
+using RestaurantManager.Domain.Common;
 using RestaurantManager.Domain.Entities.AccessControl;
 using RestaurantManager.Domain.Repositories;
 using RestaurantManager.Domain.Repositories.AccessControl;
@@ -19,16 +20,16 @@ namespace RestaurantManager.Application.Features.AccessControl.Commands.Users
             _mapper = mapper;
         }
 
-        public async Task<UserDto> HandleAsync(Guid id, UpdateUserDto updateUserDto, CancellationToken cancellationToken)
+        public async Task<Result<UserDto>> HandleAsync(Guid id, UpdateUserDto updateUserDto, CancellationToken cancellationToken)
         {
             // Find existing user
             var user = await _userRepository.Find(x => x.Id == id, cancellationToken);
             if (user == null)
-                throw new KeyNotFoundException("User not found");
+                return Result.Failure<UserDto>(Error.NotFound("User.NotFound", "User not found"));
 
             // Map DTO properties to existing entity using AutoMapper
             _mapper.Map(updateUserDto, user);
-            
+
             // Ensure UpdatedAt is set
             user.UpdatedAt = DateTime.Now;
 
@@ -48,7 +49,7 @@ namespace RestaurantManager.Application.Features.AccessControl.Commands.Users
             // Cargar roles del usuario
             userDto.Roles = await LoadUserRoles(user.Id, cancellationToken);
 
-            return userDto;
+            return Result.Success(userDto);
         }
 
         private async Task<List<RoleDropdownDto>> LoadUserRoles(Guid userId, CancellationToken cancellationToken)

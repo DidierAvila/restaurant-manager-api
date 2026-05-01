@@ -1,5 +1,6 @@
 using AutoMapper;
 using RestaurantManager.Application.DTOs.AccessControl;
+using RestaurantManager.Domain.Common;
 using RestaurantManager.Domain.Entities.AccessControl;
 using RestaurantManager.Domain.Repositories.AccessControl;
 
@@ -16,18 +17,18 @@ public class CreateRolePermission
         _mapper = mapper;
     }
 
-    public async Task<RolePermissionDto> HandleAsync(CreateRolePermissionDto request, CancellationToken cancellationToken = default)
+    public async Task<Result<RolePermissionDto>> HandleAsync(CreateRolePermissionDto request, CancellationToken cancellationToken = default)
     {
         // Verificar si ya existe la asignación
         var exists = await _rolePermissionRepository.ExistsAsync(request.RoleId, request.PermissionId, cancellationToken);
         if (exists)
         {
-            throw new InvalidOperationException($"El permiso ya está asignado a este rol");
+            return Result.Failure<RolePermissionDto>(Error.Conflict("RolePermission.AlreadyExists", "El permiso ya está asignado a este rol"));
         }
 
         var entity = _mapper.Map<RolePermission>(request);
-        
+
         var createdEntity = await _rolePermissionRepository.Create(entity, cancellationToken);
-        return _mapper.Map<RolePermissionDto>(createdEntity);
+        return Result.Success(_mapper.Map<RolePermissionDto>(createdEntity));
     }
 }

@@ -1,6 +1,7 @@
 using AutoMapper;
 using RestaurantManager.Application.DTOs.AccessControl;
 using RestaurantManager.Application.Features.AccessControl.Queries.Permissions;
+using RestaurantManager.Domain.Common;
 using RestaurantManager.Domain.Entities.AccessControl;
 using RestaurantManager.Domain.Repositories;
 using RestaurantManager.Domain.Repositories.AccessControl;
@@ -24,16 +25,16 @@ namespace RestaurantManager.Application.Features.AccessControl.Commands.Roles
             _mapper = mapper;
         }
 
-        public async Task<RoleDto> HandleAsync(CreateRoleDto createRoleDto, CancellationToken cancellationToken)
+        public async Task<Result<RoleDto>> HandleAsync(CreateRoleDto createRoleDto, CancellationToken cancellationToken)
         {
             // Validations
             if (string.IsNullOrWhiteSpace(createRoleDto.Name))
-                throw new ArgumentException("Name is required");
+                return Result.Failure<RoleDto>(Error.Validation("Role.NameRequired", "Name is required"));
 
             // Check if role already exists
             var existingRole = await _roleRepository.Find(x => x.Name == createRoleDto.Name, cancellationToken);
             if (existingRole != null)
-                throw new InvalidOperationException("Role with this name already exists");
+                return Result.Failure<RoleDto>(Error.Conflict("Role.NameExists", "Role with this name already exists"));
 
             // Map DTO to Entity using AutoMapper
             var role = _mapper.Map<Role>(createRoleDto);
@@ -56,11 +57,11 @@ namespace RestaurantManager.Application.Features.AccessControl.Commands.Roles
                 roleDto.Permissions = (List<PermissionDropdownDto>?)await _getPermissionsForDropdown.HandleAsync(roleDto.Id, cancellationToken);
             }
 
-            return roleDto;
+            return Result.Success(roleDto);
         }
 
         /// <summary>
-        /// Asigna múltiples permisos a un rol recién creado
+        /// Asigna mï¿½ltiples permisos a un rol reciï¿½n creado
         /// </summary>
         private async Task AssignPermissionsToRole(Guid roleId, List<Guid> permissionIds, CancellationToken cancellationToken)
         {
@@ -73,7 +74,7 @@ namespace RestaurantManager.Application.Features.AccessControl.Commands.Roles
                 {
                     validPermissions.Add(permission);
 
-                    // Crear la relación RolePermission
+                    // Crear la relaciï¿½n RolePermission
                     var rolePermission = new RolePermission
                     {
                         RoleId = roleId,

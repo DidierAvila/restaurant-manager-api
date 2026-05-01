@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using RestaurantManager.Application.DTOs.AccessControl;
 using RestaurantManager.Application.Features.AccessControl.Commands.RolePermissions;
 using RestaurantManager.Application.Features.AccessControl.Queries.Permissions;
+using RestaurantManager.Domain.Common;
 using RestaurantManager.Domain.Entities.AccessControl;
 using RestaurantManager.Domain.Repositories;
 using RestaurantManager.Domain.Repositories.AccessControl;
@@ -34,19 +35,19 @@ public class UpdateRole
         _logger = logger;
     }
 
-    public async Task<RoleDto> HandleAsync(Guid id, UpdateRoleDto updateRoleDto, CancellationToken cancellationToken)
+    public async Task<Result<RoleDto>> HandleAsync(Guid id, UpdateRoleDto updateRoleDto, CancellationToken cancellationToken)
     {
         // Find existing role
         var role = await _roleRepository.Find(x => x.Id == id, cancellationToken);
         if (role == null)
-            throw new KeyNotFoundException("Role not found");
+            return Result.Failure<RoleDto>(Error.NotFound("Role.NotFound", "Role not found"));
 
         // Check if name already exists (excluding current role)
         if (!string.IsNullOrWhiteSpace(updateRoleDto.Name))
         {
             var existingRole = await _roleRepository.Find(x => x.Name == updateRoleDto.Name && x.Id != id, cancellationToken);
             if (existingRole != null)
-                throw new InvalidOperationException("Role with this name already exists");
+                return Result.Failure<RoleDto>(Error.Conflict("Role.NameExists", "Role with this name already exists"));
         }
 
         // Map DTO properties to existing entity using AutoMapper
@@ -59,7 +60,7 @@ public class UpdateRole
         await _roleRepository.Update(role, cancellationToken);
 
         // Actualizar permisos si se proporcionaron
-        if (updateRoleDto.PermissionIds != null) 
+        if (updateRoleDto.PermissionIds != null)
         {
             await UpdateRolePermissions(id, updateRoleDto.PermissionIds, cancellationToken);
         }
@@ -71,7 +72,7 @@ public class UpdateRole
         var permissions = await _getPermissionsForDropdown.HandleAsync(id, cancellationToken);
         roleDto.Permissions = [.. permissions];
 
-        return roleDto;
+        return Result.Success(roleDto);
     }
 
     /// <summary>

@@ -12,10 +12,9 @@ namespace RestaurantManager.Api.Controllers.AccessControl;
 /// <summary>
 /// Controlador para gestionar los permisos del sistema.
 /// </summary>
-[ApiController]
 [Route("Api/Auth/[controller]")]
 [Authorize]
-public class PermissionsController : ControllerBase
+public class PermissionsController : ApiControllerBase
 {
     private readonly IPermissionCommandHandler _commandHandler;
     private readonly IPermissionQueryHandler _queryHandler;
@@ -42,17 +41,16 @@ public class PermissionsController : ControllerBase
     /// </summary>
     [HttpPost]
     [RequirePermission("permissions.create")]
-    public async Task<ActionResult<PermissionDto>> CreatePermission([FromBody] CreatePermissionDto command, CancellationToken cancellationToken)
+    public async Task<IActionResult> CreatePermission([FromBody] CreatePermissionDto command, CancellationToken cancellationToken)
     {
-        try
+        var result = await _commandHandler.CreatePermission(command, cancellationToken);
+
+        if (result.IsSuccess)
         {
-            var permission = await _commandHandler.CreatePermission(command, cancellationToken);
-            return CreatedAtAction(nameof(GetPermissionById), new { id = permission.Id }, permission);
+            return CreatedAtAction(nameof(GetPermissionById), new { id = result.Value.Id }, result.Value);
         }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(ex.Message);
-        }
+
+        return HandleError(result.Error);
     }
 
     /// <summary>
@@ -60,21 +58,10 @@ public class PermissionsController : ControllerBase
     /// </summary>
     [HttpPut("{id}")]
     [RequirePermission("permissions.update")]
-    public async Task<ActionResult<PermissionDto>> UpdatePermission(Guid id, [FromBody] UpdatePermissionDto command, CancellationToken cancellationToken)
+    public async Task<IActionResult> UpdatePermission(Guid id, [FromBody] UpdatePermissionDto command, CancellationToken cancellationToken)
     {
-        try
-        {
-            var permission = await _commandHandler.UpdatePermission(id, command, cancellationToken);
-            return Ok(permission);
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(ex.Message);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(ex.Message);
-        }
+        var result = await _commandHandler.UpdatePermission(id, command, cancellationToken);
+        return HandleResult(result);
     }
 
     /// <summary>
@@ -82,21 +69,10 @@ public class PermissionsController : ControllerBase
     /// </summary>
     [HttpDelete("{id}")]
     [RequirePermission("permissions.delete")]
-    public async Task<ActionResult<bool>> DeletePermission(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> DeletePermission(Guid id, CancellationToken cancellationToken)
     {
-        try
-        {
-            var result = await _commandHandler.DeletePermission(id, cancellationToken);
-            return Ok(result);
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(ex.Message);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(ex.Message);
-        }
+        var result = await _commandHandler.DeletePermission(id, cancellationToken);
+        return HandleResult(result);
     }
 
     /// <summary>
@@ -104,13 +80,10 @@ public class PermissionsController : ControllerBase
     /// </summary>
     [HttpGet("{id}")]
     [RequirePermission("permissions.read")]
-    public async Task<ActionResult<PermissionDto>> GetPermissionById(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetPermissionById(Guid id, CancellationToken cancellationToken)
     {
-        var permission = await _queryHandler.GetPermissionById(id, cancellationToken);
-        if (permission == null)
-            return NotFound("Permission not found");
-
-        return Ok(permission);
+        var result = await _queryHandler.GetPermissionById(id, cancellationToken);
+        return HandleResult(result);
     }
 
     /// <summary>
@@ -121,29 +94,18 @@ public class PermissionsController : ControllerBase
     /// <returns>Lista paginada de permisos</returns>
     /// <remarks>
     /// Campos disponibles para SortBy: name, description, status, createdat
-    /// 
+    ///
     /// Ejemplo de uso:
     /// GET /api/permissions?page=1&amp;pageSize=10&amp;name=read&amp;status=true&amp;sortBy=name
     /// </remarks>
     [HttpGet]
     [RequirePermission("permissions.read")]
-    public async Task<ActionResult<PaginationResponseDto<PermissionListResponseDto>>> GetAllPermissions(
+    public async Task<IActionResult> GetAllPermissions(
         [FromQuery] PermissionFilterDto filter,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            var permissions = await _queryHandler.GetAllPermissionsFiltered(filter, cancellationToken);
-            return Ok(permissions);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(ex.Message);
-        }
-        catch (Exception)
-        {
-            return StatusCode(500, "An error occurred while retrieving permissions");
-        }
+        var result = await _queryHandler.GetAllPermissionsFiltered(filter, cancellationToken);
+        return HandleResult(result);
     }
 
     /// <summary>
@@ -151,10 +113,10 @@ public class PermissionsController : ControllerBase
     /// </summary>
     [HttpGet("simple")]
     [RequirePermission("permissions.read")]
-    public async Task<ActionResult<IEnumerable<PermissionDto>>> GetAllPermissionsSimple(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetAllPermissionsSimple(CancellationToken cancellationToken)
     {
-        var permissions = await _queryHandler.GetAllPermissions(cancellationToken);
-        return Ok(permissions);
+        var result = await _queryHandler.GetAllPermissions(cancellationToken);
+        return HandleResult(result);
     }
 
     /// <summary>
@@ -162,10 +124,10 @@ public class PermissionsController : ControllerBase
     /// </summary>
     [HttpGet("active")]
     [RequirePermission("permissions.read")]
-    public async Task<ActionResult<IEnumerable<PermissionDto>>> GetActivePermissions(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetActivePermissions(CancellationToken cancellationToken)
     {
-        var permissions = await _queryHandler.GetActivePermissions(cancellationToken);
-        return Ok(permissions);
+        var result = await _queryHandler.GetActivePermissions(cancellationToken);
+        return HandleResult(result);
     }
 
     /// <summary>
@@ -178,7 +140,7 @@ public class PermissionsController : ControllerBase
     /// <remarks>
     /// Este endpoint está optimizado para cargar listas desplegables en el frontend.
     /// Solo retorna permisos activos con los campos esenciales (Id, Name) ordenados alfabéticamente.
-    /// 
+    ///
     /// Ejemplo de respuesta:
     /// [
     ///   { "id": "123e4567-e89b-12d3-a456-426614174000", "name": "Create Users" },
@@ -190,17 +152,10 @@ public class PermissionsController : ControllerBase
     [RequirePermission("permissions.read")]
     [ProducesResponseType(typeof(IEnumerable<PermissionDropdownDto>), 200)]
     [ProducesResponseType(500)]
-    public async Task<ActionResult<IEnumerable<PermissionDropdownDto>>> GetPermissionsForDropdown(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetPermissionsForDropdown(CancellationToken cancellationToken)
     {
-        try
-        {
-            var permissions = await _queryHandler.GetPermissionsForDropdown(cancellationToken);
-            return Ok(permissions);
-        }
-        catch (Exception)
-        {
-            return StatusCode(500, "An error occurred while retrieving permissions for dropdown");
-        }
+        var result = await _queryHandler.GetPermissionsForDropdown(cancellationToken);
+        return HandleResult(result);
     }
 
     /// <summary>
@@ -208,10 +163,10 @@ public class PermissionsController : ControllerBase
     /// </summary>
     [HttpGet("summary")]
     [RequirePermission("permissions.read")]
-    public async Task<ActionResult<IEnumerable<PermissionSummaryDto>>> GetPermissionsSummary(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetPermissionsSummary(CancellationToken cancellationToken)
     {
-        var permissions = await _queryHandler.GetPermissionsSummary(cancellationToken);
-        return Ok(permissions);
+        var result = await _queryHandler.GetPermissionsSummary(cancellationToken);
+        return HandleResult(result);
     }
 
     /// <summary>

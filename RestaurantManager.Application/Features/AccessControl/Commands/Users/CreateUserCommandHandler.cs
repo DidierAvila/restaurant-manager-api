@@ -1,6 +1,7 @@
 using AutoMapper;
 using MediatR;
 using RestaurantManager.Application.DTOs.AccessControl;
+using RestaurantManager.Domain.Common;
 using RestaurantManager.Domain.Entities.AccessControl;
 using RestaurantManager.Domain.Repositories;
 using RestaurantManager.Domain.Repositories.AccessControl;
@@ -11,7 +12,7 @@ namespace RestaurantManager.Application.Features.AccessControl.Commands.Users;
 /// <summary>
 /// Handler para el comando CreateUserCommand
 /// </summary>
-public class CreateUserCommandHandler : IRequestHandler<CreateUserCommand, UserDto>
+public class CreateUserCommandHandler : IRequestHandler<CreateUserCommand, Result<UserDto>>
 {
     private readonly IRepositoryBase<User> _userRepository;
     private readonly IRepositoryBase<Role> _roleRepository;
@@ -30,21 +31,21 @@ public class CreateUserCommandHandler : IRequestHandler<CreateUserCommand, UserD
         _mapper = mapper;
     }
 
-    public async Task<UserDto> Handle(CreateUserCommand request, CancellationToken cancellationToken)
+    public async Task<Result<UserDto>> Handle(CreateUserCommand request, CancellationToken cancellationToken)
     {
         var createUserDto = request.UserDto;
 
         // Validations
         if (string.IsNullOrWhiteSpace(createUserDto.Email))
-            throw new ArgumentException("Email is required");
+            return Result.Failure<UserDto>(Error.Validation("User.EmailRequired", "Email is required"));
 
         if (createUserDto.UserTypeId == Guid.Empty)
-            throw new ArgumentException("UserTypeId is required");
+            return Result.Failure<UserDto>(Error.Validation("User.UserTypeRequired", "UserTypeId is required"));
 
         // Check if user already exists
         var existingUser = await _userRepository.Find(x => x.Email == createUserDto.Email, cancellationToken);
         if (existingUser != null)
-            throw new InvalidOperationException("User with this email already exists");
+            return Result.Failure<UserDto>(Error.Conflict("User.EmailExists", "User with this email already exists"));
 
         // Map DTO to Entity using AutoMapper
         var user = _mapper.Map<User>(createUserDto);
@@ -74,7 +75,7 @@ public class CreateUserCommandHandler : IRequestHandler<CreateUserCommand, UserD
             userDto.Roles = await LoadUserRoles(createdUser.Id, cancellationToken);
         }
 
-        return userDto;
+        return Result.Success(userDto);
     }
 
     /// <summary>

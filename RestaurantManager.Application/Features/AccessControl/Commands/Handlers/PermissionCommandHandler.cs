@@ -1,5 +1,6 @@
 using RestaurantManager.Application.DTOs.AccessControl;
 using RestaurantManager.Application.Features.AccessControl.Commands.Permissions;
+using RestaurantManager.Domain.Common;
 
 namespace RestaurantManager.Application.Features.AccessControl.Commands.Handlers;
 
@@ -19,17 +20,17 @@ public class PermissionCommandHandler : IPermissionCommandHandler
         _deletePermission = deletePermission;
     }
 
-    public async Task<PermissionDto> CreatePermission(CreatePermissionDto command, CancellationToken cancellationToken)
+    public async Task<Result<PermissionDto>> CreatePermission(CreatePermissionDto command, CancellationToken cancellationToken)
     {
         return await _createPermission.HandleAsync(command, cancellationToken);
     }
 
-    public async Task<PermissionDto> UpdatePermission(Guid id, UpdatePermissionDto command, CancellationToken cancellationToken)
+    public async Task<Result<PermissionDto>> UpdatePermission(Guid id, UpdatePermissionDto command, CancellationToken cancellationToken)
     {
         return await _updatePermission.HandleAsync(id, command, cancellationToken);
     }
 
-    public async Task<bool> DeletePermission(Guid id, CancellationToken cancellationToken)
+    public async Task<Result> DeletePermission(Guid id, CancellationToken cancellationToken)
     {
         return await _deletePermission.HandleAsync(id, cancellationToken);
     }

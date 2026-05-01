@@ -8,10 +8,9 @@ namespace RestaurantManager.Api.Controllers
     /// <summary>
     /// Controlador para reportes de ventas del restaurante
     /// </summary>
-    [ApiController]
     [Route("api/[controller]")]
     [Produces("application/json")]
-    public class ReportsController : ControllerBase
+    public class ReportsController : ApiControllerBase
     {
         private readonly IMediator _mediator;
 
@@ -26,25 +25,18 @@ namespace RestaurantManager.Api.Controllers
         /// <param name="fromDate">Fecha inicial (formato: yyyy-MM-dd)</param>
         /// <param name="toDate">Fecha final (formato: yyyy-MM-dd)</param>
         [HttpGet("sales")]
-        public async Task<ActionResult<SalesReportDto>> GetSalesReport(
+        public async Task<IActionResult> GetSalesReport(
             [FromQuery] DateTime? fromDate,
             [FromQuery] DateTime? toDate)
         {
-            try
+            var query = new GetSalesReportQuery
             {
-                var query = new GetSalesReportQuery
-                {
-                    FromDate = fromDate ?? DateTime.UtcNow.AddDays(-30),
-                    ToDate = toDate ?? DateTime.UtcNow
-                };
+                FromDate = fromDate ?? DateTime.UtcNow.AddDays(-30),
+                ToDate = toDate ?? DateTime.UtcNow
+            };
 
-                var report = await _mediator.Send(query);
-                return Ok(report);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
+            var result = await _mediator.Send(query);
+            return HandleResult(result);
         }
     }
 }

@@ -21,7 +21,6 @@ namespace RestaurantManager.Api.Controllers.AccessControl;
 /// <param name="assignMultiplePermissionsToRole"></param>
 /// <param name="removePermissionFromRole"></param>
 [Route("Api/Auth/[controller]")]
-[ApiController]
 [Authorize]
 public class RolesController(
     IRoleCommandHandler roleCommandHandler,
@@ -29,7 +28,7 @@ public class RolesController(
     GetPermissionsByRole getPermissionsByRole,
     AssignPermissionToRole assignPermissionToRole,
     AssignMultiplePermissionsToRole assignMultiplePermissionsToRole,
-    RemovePermissionFromRole removePermissionFromRole) : ControllerBase
+    RemovePermissionFromRole removePermissionFromRole) : ApiControllerBase
 {
     private readonly IRoleCommandHandler _roleCommandHandler = roleCommandHandler;
     private readonly IRoleQueryHandler _roleQueryHandler = roleQueryHandler;
@@ -46,29 +45,18 @@ public class RolesController(
     /// <returns>Lista paginada de roles</returns>
     /// <remarks>
     /// Campos disponibles para SortBy: name, description, status, createdat
-    /// 
+    ///
     /// Ejemplo de uso:
     /// GET /api/roles?page=1&amp;pageSize=10&amp;name=admin&amp;status=true&amp;sortBy=name
     /// </remarks>
     [HttpGet]
     [RequirePermission("roles.read")]
-    public async Task<ActionResult<PaginationResponseDto<RoleListResponseDto>>> GetAllRoles(
+    public async Task<IActionResult> GetAllRoles(
         [FromQuery] RoleFilterDto filter,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            var roles = await _roleQueryHandler.GetAllRolesFiltered(filter, cancellationToken);
-            return Ok(roles);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(ex.Message);
-        }
-        catch (Exception)
-        {
-            return StatusCode(500, "An error occurred while retrieving roles");
-        }
+        var result = await _roleQueryHandler.GetAllRolesFiltered(filter, cancellationToken);
+        return HandleResult(result);
     }
 
     /// <summary>
@@ -76,17 +64,10 @@ public class RolesController(
     /// </summary>
     [HttpGet("simple")]
     [RequirePermission("roles.read")]
-    public async Task<ActionResult<IEnumerable<RoleDto>>> GetAllRolesSimple(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetAllRolesSimple(CancellationToken cancellationToken)
     {
-        try
-        {
-            var roles = await _roleQueryHandler.GetAllRoles(cancellationToken);
-            return Ok(roles);
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(ex.Message);
-        }
+        var result = await _roleQueryHandler.GetAllRoles(cancellationToken);
+        return HandleResult(result);
     }
 
     /// <summary>
@@ -97,11 +78,11 @@ public class RolesController(
     /// <remarks>
     /// Endpoint optimizado para componentes UI que requieren listas de roles:
     /// - Solo roles activos (status = true)
-    /// - Solo campos ID y Name para máximo rendimiento  
+    /// - Solo campos ID y Name para máximo rendimiento
     /// - Ordenamiento alfabético automático por nombre
     /// - Sin paginación (lista completa)
     /// - Ideal para: Select, Dropdown, Multiselect, etc.
-    /// 
+    ///
     /// Ejemplo de respuesta:
     /// [
     ///   { "id": "uuid-1", "name": "Administrador" },
@@ -111,17 +92,10 @@ public class RolesController(
     /// </remarks>
     [HttpGet("dropdown")]
     [RequirePermission("roles.read")]
-    public async Task<ActionResult<IEnumerable<RoleDropdownDto>>> GetRolesDropdown(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetRolesDropdown(CancellationToken cancellationToken)
     {
-        try
-        {
-            var roles = await _roleQueryHandler.GetRolesDropdown(cancellationToken);
-            return Ok(roles);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, $"Internal server error: {ex.Message}");
-        }
+        var result = await _roleQueryHandler.GetRolesDropdown(cancellationToken);
+        return HandleResult(result);
     }
 
     /// <summary>
@@ -132,20 +106,10 @@ public class RolesController(
     /// <returns>Rol con sus permisos asociados</returns>
     [HttpGet("{id}")]
     [RequirePermission("roles.read")]
-    public async Task<ActionResult<RoleDto>> GetRoleById(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetRoleById(Guid id, CancellationToken cancellationToken)
     {
-        try
-        {
-            var role = await _roleQueryHandler.GetRoleById(id, cancellationToken);
-            if (role == null)
-                return NotFound("Role not found");
-
-            return Ok(role);
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(ex.Message);
-        }
+        var result = await _roleQueryHandler.GetRoleById(id, cancellationToken);
+        return HandleResult(result);
     }
 
     /// <summary>
@@ -162,31 +126,22 @@ public class RolesController(
     ///   "status": true,
     ///   "permissionIds": ["uuid-perm-1", "uuid-perm-2"]
     /// }
-    /// 
+    ///
     /// Si no se especifican permisos (permissionIds), el rol se creará sin permisos asignados.
     /// Los permisos se pueden asignar posteriormente usando los endpoints de gestión de permisos.
     /// </remarks>
     [HttpPost]
     [RequirePermission("roles.create")]
-    public async Task<ActionResult<RoleDto>> CreateRole([FromBody] CreateRoleDto createRoleDto, CancellationToken cancellationToken)
+    public async Task<IActionResult> CreateRole([FromBody] CreateRoleDto createRoleDto, CancellationToken cancellationToken)
     {
-        try
+        var result = await _roleCommandHandler.CreateRole(createRoleDto, cancellationToken);
+
+        if (result.IsSuccess)
         {
-            var createdRole = await _roleCommandHandler.CreateRole(createRoleDto, cancellationToken);
-            return CreatedAtAction(nameof(GetRoleById), new { id = createdRole.Id }, createdRole);
+            return CreatedAtAction(nameof(GetRoleById), new { id = result.Value.Id }, result.Value);
         }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(ex.Message);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Conflict(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(ex.Message);
-        }
+
+        return HandleError(result.Error);
     }
 
     /// <summary>
@@ -202,14 +157,14 @@ public class RolesController(
     /// Para gestionar permisos específicamente, usar los endpoints de gestión de permisos:
     /// - POST /api/auth/roles/{id}/permissions - Asignar permisos
     /// - DELETE /api/auth/roles/{id}/permissions - Remover permisos
-    /// 
+    ///
     /// Ejemplo de request:
     /// {
     ///   "name": "Manager de Ventas Senior",
     ///   "description": "Gestiona el equipo de ventas con más privilegios",
     ///   "permissionIds": ["uuid-perm-1", "uuid-perm-2", "uuid-perm-3"]
     /// }
-    /// 
+    ///
     /// Respuesta incluye permisos actualizados:
     /// {
     ///   "id": "uuid-rol",
@@ -219,25 +174,10 @@ public class RolesController(
     /// </remarks>
     [HttpPut("{id}")]
     [RequirePermission("roles.update")]
-    public async Task<ActionResult<RoleDto>> UpdateRole(Guid id, [FromBody] UpdateRoleDto updateRoleDto, CancellationToken cancellationToken)
+    public async Task<IActionResult> UpdateRole(Guid id, [FromBody] UpdateRoleDto updateRoleDto, CancellationToken cancellationToken)
     {
-        try
-        {
-            var updatedRole = await _roleCommandHandler.UpdateRole(id, updateRoleDto, cancellationToken);
-            return Ok(updatedRole);
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(ex.Message);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Conflict(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(ex.Message);
-        }
+        var result = await _roleCommandHandler.UpdateRole(id, updateRoleDto, cancellationToken);
+        return HandleResult(result);
     }
 
     /// <summary>
@@ -248,21 +188,10 @@ public class RolesController(
     /// <returns></returns>
     [HttpDelete("{id}")]
     [RequirePermission("roles.delete")]
-    public async Task<ActionResult> DeleteRole(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> DeleteRole(Guid id, CancellationToken cancellationToken)
     {
-        try
-        {
-            await _roleCommandHandler.DeleteRole(id, cancellationToken);
-            return Ok();
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(ex.Message);
-        }
+        var result = await _roleCommandHandler.DeleteRole(id, cancellationToken);
+        return HandleResult(result);
     }
 
     // GET: api/Roles/{id}/permissions
@@ -327,44 +256,39 @@ public class RolesController(
     /// <returns>Resultado detallado de la asignación múltiple</returns>
     [HttpPost("{roleId}/permissions/bulk")]
     [RequirePermission("roles.manage")]
-    public async Task<ActionResult<MultiplePermissionAssignmentResult>> AssignMultiplePermissionsToRole(
+    public async Task<IActionResult> AssignMultiplePermissionsToRole(
         Guid roleId,
         [FromBody] List<Guid> permissionIds,
         CancellationToken cancellationToken)
     {
-        try
+        var request = new AssignMultiplePermissionsToRoleDto
         {
-            var request = new AssignMultiplePermissionsToRoleDto
-            {
-                RoleId = roleId,
-                PermissionIds = permissionIds
-            };
+            RoleId = roleId,
+            PermissionIds = permissionIds
+        };
 
-            var result = await _assignMultiplePermissionsToRole.HandleAsync(request, cancellationToken);
+        var result = await _assignMultiplePermissionsToRole.HandleAsync(request, cancellationToken);
 
-            if (result.HasErrors)
-            {
-                return BadRequest(new
-                {
-                    message = "La asignación se completó con algunos errores",
-                    result
-                });
-            }
+        if (!result.IsSuccess)
+        {
+            return HandleError(result.Error);
+        }
 
-            return Ok(new
+        // Si hay errores parciales en la asignación
+        if (result.Value.HasErrors)
+        {
+            return BadRequest(new
             {
-                message = "Permisos asignados exitosamente",
-                result
+                message = "La asignación se completó con algunos errores",
+                result = result.Value
             });
         }
-        catch (KeyNotFoundException ex)
+
+        return Ok(new
         {
-            return NotFound(new { message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = "Error interno del servidor", details = ex.Message });
-        }
+            message = "Permisos asignados exitosamente",
+            result = result.Value
+        });
     }
 
     // DELETE: api/Roles/{roleId}/permissions/{permissionId}
@@ -399,25 +323,18 @@ public class RolesController(
     /// <returns>Resultado de la remoción múltiple</returns>
     [HttpDelete("{roleId}/permissions")]
     [RequirePermission("roles.manage")]
-    public async Task<ActionResult<MultiplePermissionRemovalResult>> RemoveMultiplePermissionsFromRole(
+    public async Task<IActionResult> RemoveMultiplePermissionsFromRole(
         Guid roleId,
         [FromBody] List<Guid> permissionIds,
         CancellationToken cancellationToken)
     {
-        try
+        var command = new RemoveMultiplePermissionsFromRole
         {
-            var command = new RemoveMultiplePermissionsFromRole
-            {
-                RoleId = roleId,
-                PermissionIds = permissionIds
-            };
+            RoleId = roleId,
+            PermissionIds = permissionIds
+        };
 
-            var result = await _roleCommandHandler.RemoveMultiplePermissionsFromRole(command, cancellationToken);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = "Error interno del servidor", details = ex.Message });
-        }
+        var result = await _roleCommandHandler.RemoveMultiplePermissionsFromRole(command, cancellationToken);
+        return HandleResult(result);
     }
 }

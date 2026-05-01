@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using RestaurantManager.Application.DTOs.AccessControl;
 using RestaurantManager.Application.Features.AccessControl.Commands.Tokens;
+using RestaurantManager.Domain.Common;
 using RestaurantManager.Domain.Entities.AccessControl;
 using RestaurantManager.Domain.Repositories;
 using BC = BCrypt.Net.BCrypt;
@@ -15,10 +16,10 @@ public class LoginCommand : ILoginCommand
     private readonly ILogger<LoginCommand> _logger;
 
     public LoginCommand(
-        IRepositoryBase<User> userRepository, 
+        IRepositoryBase<User> userRepository,
         ILogger<LoginCommand> logger,
         IRepositoryBase<UserType> userTypeRepository,
-        ITokenCommand tokenCommand) 
+        ITokenCommand tokenCommand)
     {
         _userRepository = userRepository;
         _logger = logger;
@@ -26,39 +27,53 @@ public class LoginCommand : ILoginCommand
         _tokenCommand = tokenCommand;
     }
 
-    public async Task<LoginResponseDto?> Login(LoginRequestDto autorizacion, CancellationToken cancellationToken)
+    public async Task<Result<LoginResponseDto>> Login(LoginRequestDto autorizacion, CancellationToken cancellationToken)
     {
-        // Buscar usuario solo por email
-        User? CurrentUser = await _userRepository.Find(x => x.Email == autorizacion.Email, cancellationToken);
-
-        if (CurrentUser == null || CurrentUser.Status != true)
+        try
         {
-            throw new UnauthorizedAccessException("Usuario inactivo. Contacte al administrador.");
-        }
+            // Buscar usuario solo por email
+            User? CurrentUser = await _userRepository.Find(x => x.Email == autorizacion.Email, cancellationToken);
 
-        // Verificar si el usuario existe y la contraseña es correcta
-        if (CurrentUser != null && !string.IsNullOrEmpty(CurrentUser.Password))
-        {
-            bool isPasswordValid = BC.Verify(autorizacion.Password, CurrentUser.Password);
-            if (isPasswordValid)
+            if (CurrentUser == null)
             {
-                CurrentUser.UserType = await _userTypeRepository.Find(x => x.Id == CurrentUser.UserTypeId, cancellationToken);
-                _logger.LogInformation("Login: success");
-                string CurrentToken = await _tokenCommand.GetToken(CurrentUser, cancellationToken);
-                LoginResponseDto loginResponse = new()
-                { Token = CurrentToken };
+                _logger.LogWarning("Login: user not found {Email}", autorizacion.Email);
+                return Result.Failure<LoginResponseDto>(Error.Unauthorized("Login.InvalidCredentials", "Credenciales inválidas"));
+            }
 
-                return loginResponse;
-            }
-            else
+            if (CurrentUser.Status != true)
             {
-                _logger.LogWarning("Login: invalid password for user {Email}", autorizacion.Email);
+                _logger.LogWarning("Login: inactive user {Email}", autorizacion.Email);
+                return Result.Failure<LoginResponseDto>(Error.Forbidden("Login.InactiveUser", "Usuario inactivo. Contacte al administrador."));
             }
+
+            // Verificar si el usuario existe y la contraseña es correcta
+            if (!string.IsNullOrEmpty(CurrentUser.Password))
+            {
+                bool isPasswordValid = BC.Verify(autorizacion.Password, CurrentUser.Password);
+                if (isPasswordValid)
+                {
+                    CurrentUser.UserType = await _userTypeRepository.Find(x => x.Id == CurrentUser.UserTypeId, cancellationToken);
+                    _logger.LogInformation("Login: success for user {Email}", autorizacion.Email);
+                    string CurrentToken = await _tokenCommand.GetToken(CurrentUser, cancellationToken);
+                    LoginResponseDto loginResponse = new()
+                    { Token = CurrentToken };
+
+                    return Result.Success(loginResponse);
+                }
+                else
+                {
+                    _logger.LogWarning("Login: invalid password for user {Email}", autorizacion.Email);
+                    return Result.Failure<LoginResponseDto>(Error.Unauthorized("Login.InvalidCredentials", "Credenciales inválidas"));
+                }
+            }
+
+            _logger.LogWarning("Login: user has no password {Email}", autorizacion.Email);
+            return Result.Failure<LoginResponseDto>(Error.Unauthorized("Login.InvalidCredentials", "Credenciales inválidas"));
         }
-        else
+        catch (Exception ex)
         {
-            _logger.LogWarning("Login: user not found {Email}", autorizacion.Email);
+            _logger.LogError(ex, "Login: unexpected error for user {Email}", autorizacion.Email);
+            return Result.Failure<LoginResponseDto>(Error.Failure("Login.Error", "Error al intentar iniciar sesión"));
         }
-        return null;
     }
 }

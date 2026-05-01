@@ -11,9 +11,8 @@ namespace RestaurantManager.Api.Controllers.AccessControl
     /// <summary>
     /// Controlador para la autenticación de usuarios.
     /// </summary>
-    [ApiController]
     [Route("Api/[controller]")]
-    public class AuthController : ControllerBase
+    public class AuthController : ApiControllerBase
     {
         private readonly ILogger<AuthController> _logger;
         private readonly ILoginCommand _loginCommand;
@@ -42,22 +41,26 @@ namespace RestaurantManager.Api.Controllers.AccessControl
         /// <param name="cancellationToken">Token de cancelación para la operación asíncrona.</param>
         /// <returns>Un token JWT si las credenciales son válidas; de lo contrario, un error.</returns>
         /// <response code="200">Retorna el token JWT de autenticación</response>
-        /// <response code="400">Credenciales inválidas o datos de entrada incorrectos</response>
+        /// <response code="401">Credenciales inválidas</response>
+        /// <response code="403">Usuario inactivo</response>
         /// <response code="500">Error interno del servidor</response>
         [HttpPost]
         [Route("Login")]
         [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> Login([FromBody] LoginRequestDto autorizacion, CancellationToken cancellationToken)
         {
-            _logger.LogInformation("Login");
-            LoginResponseDto? Response = await _loginCommand.Login(autorizacion, cancellationToken);
+            _logger.LogInformation("Login attempt for {Email}", autorizacion.Email);
+            var result = await _loginCommand.Login(autorizacion, cancellationToken);
 
-            if (Response == null)
-                return BadRequest();
+            if (result.IsSuccess)
+            {
+                return Ok(result.Value.Token);
+            }
 
-            return Ok(Response.Token);
+            return HandleError(result.Error);
         }
 
         /// <summary>
@@ -139,61 +142,43 @@ namespace RestaurantManager.Api.Controllers.AccessControl
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<ActionResult<UserDto>> UpdateCurrentUser([FromBody] UpdateCurrentUserDto updateDto, CancellationToken cancellationToken)
+        public async Task<IActionResult> UpdateCurrentUser([FromBody] UpdateCurrentUserDto updateDto, CancellationToken cancellationToken)
         {
-            try
+            _logger.LogInformation("UpdateCurrentUser endpoint called");
+
+            // Obtener el ID del usuario desde el token JWT
+            var userIdClaim = User.FindFirst(CustomClaimTypes.UserId)?.Value;
+            _logger.LogInformation("User ID claim from token: {UserId}", userIdClaim);
+
+            if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
             {
-                _logger.LogInformation("UpdateCurrentUser endpoint called");
+                _logger.LogWarning("Invalid or missing user ID in token");
+                return Unauthorized(new { message = "Invalid or missing user ID in token" });
+            }
 
-                // Obtener el ID del usuario desde el token JWT
-                var userIdClaim = User.FindFirst(CustomClaimTypes.UserId)?.Value;
-                _logger.LogInformation("User ID claim from token: {UserId}", userIdClaim);
+            _logger.LogInformation("Parsed user ID: {UserId}", userId);
 
-                if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
-                {
-                    _logger.LogWarning("Invalid or missing user ID in token");
-                    return Unauthorized(new { message = "Invalid or missing user ID in token" });
-                }
+            // Crear el DTO para actualizar el usuario
+            var updateUserDto = new UpdateUserDto
+            {
+                Name = updateDto.Name,
+                Email = updateDto.Email,
+                Phone = updateDto.Phone,
+                Image = updateDto.Image,
+                Address = updateDto.Address,
+                UserTypeId = updateDto.UserTypeId,
+                AdditionalData = updateDto.AdditionalData
+            };
 
-                _logger.LogInformation("Parsed user ID: {UserId}", userId);
+            // Llamar al servicio existente de actualización de usuarios
+            var result = await _userCommandHandler.UpdateUser(userId, updateUserDto, cancellationToken);
 
-                // Crear el DTO para actualizar el usuario
-                var updateUserDto = new UpdateUserDto
-                {
-                    Name = updateDto.Name,
-                    Email = updateDto.Email,
-                    Phone = updateDto.Phone,
-                    Image = updateDto.Image,
-                    Address = updateDto.Address,
-                    UserTypeId = updateDto.UserTypeId,
-                    AdditionalData = updateDto.AdditionalData
-                };
-
-                // Llamar al servicio existente de actualización de usuarios
-                var updatedUser = await _userCommandHandler.UpdateUser(userId, updateUserDto, cancellationToken);
-
+            if (result.IsSuccess)
+            {
                 _logger.LogInformation("Successfully updated user with ID: {UserId}", userId);
-                return Ok(updatedUser);
             }
-            catch (KeyNotFoundException ex)
-            {
-                _logger.LogError(ex, "User not found in database");
-                return NotFound(new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error updating user information");
-                return StatusCode(500, new
-                {
-                    success = false,
-                    message = "Internal server error",
-                    error = ex.Message
-                });
-            }
+
+            return HandleResult(result);
         }
     }
 }

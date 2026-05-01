@@ -1,13 +1,14 @@
 using MediatR;
 using RestaurantManager.Application.DTOs.Reports;
 using RestaurantManager.Application.Features.Reports.Queries;
+using RestaurantManager.Domain.Common;
 using RestaurantManager.Domain.Entities;
 using RestaurantManager.Domain.Repositories;
 
 namespace RestaurantManager.Application.Features.Reports.Handlers
 {
     public class ReportQueryHandler :
-        IRequestHandler<GetSalesReportQuery, SalesReportDto>
+        IRequestHandler<GetSalesReportQuery, Result<SalesReportDto>>
     {
         private readonly IRepositoryBase<Order> _orderRepository;
         private readonly IRepositoryBase<OrderItem> _orderItemRepository;
@@ -23,13 +24,15 @@ namespace RestaurantManager.Application.Features.Reports.Handlers
             _dishRepository = dishRepository;
         }
 
-        public async Task<SalesReportDto> Handle(GetSalesReportQuery request, CancellationToken cancellationToken)
+        public async Task<Result<SalesReportDto>> Handle(GetSalesReportQuery request, CancellationToken cancellationToken)
         {
-            // Validar fechas
-            if (request.FromDate > request.ToDate)
+            try
             {
-                throw new Exception("La fecha 'desde' no puede ser mayor que 'hasta'");
-            }
+                // Validar fechas
+                if (request.FromDate > request.ToDate)
+                {
+                    return Result.Failure<SalesReportDto>(Error.Validation("Report.InvalidDates", "La fecha 'desde' no puede ser mayor que 'hasta'"));
+                }
 
             // Obtener pedidos cerrados o entregados en el rango de fechas
             var orders = await _orderRepository.Finds(
@@ -67,20 +70,25 @@ namespace RestaurantManager.Application.Features.Reports.Handlers
             // Ventas por categoría
             var salesByCategory = await GetSalesByCategory(orderItems, totalSales, cancellationToken);
 
-            // Ventas por plato
-            var salesByDish = await GetSalesByDish(orderItems, cancellationToken);
+                // Ventas por plato
+                var salesByDish = await GetSalesByDish(orderItems, cancellationToken);
 
-            return new SalesReportDto
+                return Result.Success(new SalesReportDto
+                {
+                    FromDate = request.FromDate,
+                    ToDate = request.ToDate,
+                    TotalOrders = totalOrders,
+                    TotalSales = totalSales,
+                    AverageTicket = averageTicket,
+                    TopDish = topDish,
+                    SalesByCategory = salesByCategory,
+                    SalesByDish = salesByDish
+                });
+            }
+            catch (Exception ex)
             {
-                FromDate = request.FromDate,
-                ToDate = request.ToDate,
-                TotalOrders = totalOrders,
-                TotalSales = totalSales,
-                AverageTicket = averageTicket,
-                TopDish = topDish,
-                SalesByCategory = salesByCategory,
-                SalesByDish = salesByDish
-            };
+                return Result.Failure<SalesReportDto>(Error.Failure("Report.Generate", ex.Message));
+            }
         }
 
         private async Task<TopDishDto?> GetTopDish(List<OrderItem> orderItems, CancellationToken cancellationToken)

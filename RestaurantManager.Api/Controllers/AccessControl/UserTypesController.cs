@@ -9,10 +9,9 @@ namespace RestaurantManager.Api.Controllers.AccessControl;
 /// <summary>
 /// Controlador para gestionar los tipos de usuario.
 /// </summary>
-[ApiController]
 [Route("Api/Auth/[controller]")]
 [Authorize]
-public class UserTypesController : ControllerBase
+public class UserTypesController : ApiControllerBase
 {
     private readonly IUserTypeQueryHandler _queryHandler;
     private readonly ILogger<UserTypesController> _logger;

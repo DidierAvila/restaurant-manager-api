@@ -1,3 +1,4 @@
+using RestaurantManager.Domain.Common;
 using RestaurantManager.Domain.Entities.AccessControl;
 using RestaurantManager.Domain.Repositories;
 
@@ -12,14 +13,14 @@ public class DeleteUser
         _userRepository = userRepository;
     }
 
-    public async Task<bool> HandleAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<Result> HandleAsync(Guid id, CancellationToken cancellationToken)
     {
         // Find existing user
         var user = await _userRepository.Find(x => x.Id == id, cancellationToken);
         if (user == null)
-            throw new KeyNotFoundException("User not found");
+            return Result.Failure(Error.NotFound("User.NotFound", "User not found"));
 
         await _userRepository.Delete(user, cancellationToken);
-        return true;
+        return Result.Success();
     }
 }

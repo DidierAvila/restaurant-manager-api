@@ -1,5 +1,6 @@
 using AutoMapper;
 using RestaurantManager.Application.DTOs.AccessControl;
+using RestaurantManager.Domain.Common;
 using RestaurantManager.Domain.Entities.AccessControl;
 using RestaurantManager.Domain.Repositories;
 using RestaurantManager.Domain.Repositories.AccessControl;
@@ -22,19 +23,19 @@ public class CreateUser
         _mapper = mapper;
     }
 
-    public async Task<UserDto> HandleAsync(CreateUserDto createUserDto, CancellationToken cancellationToken)
+    public async Task<Result<UserDto>> HandleAsync(CreateUserDto createUserDto, CancellationToken cancellationToken)
     {
         // Validations
         if (string.IsNullOrWhiteSpace(createUserDto.Email))
-            throw new ArgumentException("Email is required");
+            return Result.Failure<UserDto>(Error.Validation("User.EmailRequired", "Email is required"));
 
         if (createUserDto.UserTypeId == Guid.Empty)
-            throw new ArgumentException("UserTypeId is required");
+            return Result.Failure<UserDto>(Error.Validation("User.UserTypeRequired", "UserTypeId is required"));
 
         // Check if user already exists
         var existingUser = await _userRepository.Find(x => x.Email == createUserDto.Email, cancellationToken);
         if (existingUser != null)
-            throw new InvalidOperationException("User with this email already exists");
+            return Result.Failure<UserDto>(Error.Conflict("User.EmailExists", "User with this email already exists"));
 
         // Map DTO to Entity using AutoMapper
         var user = _mapper.Map<User>(createUserDto);
@@ -64,7 +65,7 @@ public class CreateUser
             userDto.Roles = await LoadUserRoles(createdUser.Id, cancellationToken);
         }
 
-        return userDto;
+        return Result.Success(userDto);
     }
 
     /// <summary>

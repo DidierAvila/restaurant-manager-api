@@ -1,6 +1,7 @@
 using AutoMapper;
 using Microsoft.Extensions.Logging;
 using RestaurantManager.Application.DTOs.AccessControl;
+using RestaurantManager.Domain.Common;
 using RestaurantManager.Domain.Entities.AccessControl;
 using RestaurantManager.Domain.Repositories;
 using RestaurantManager.Domain.Repositories.AccessControl;
@@ -29,7 +30,7 @@ public class AssignMultiplePermissionsToRole
         _logger = logger;
     }
 
-    public async Task<MultiplePermissionAssignmentResult> HandleAsync(AssignMultiplePermissionsToRoleDto request, CancellationToken cancellationToken = default)
+    public async Task<Result<MultiplePermissionAssignmentResult>> HandleAsync(AssignMultiplePermissionsToRoleDto request, CancellationToken cancellationToken = default)
     {
         var result = new MultiplePermissionAssignmentResult
         {
@@ -40,7 +41,7 @@ public class AssignMultiplePermissionsToRole
         var role = await _roleRepository.Find(r => r.Id == request.RoleId, cancellationToken);
         if (role == null)
         {
-            throw new KeyNotFoundException($"Role with ID {request.RoleId} not found");
+            return Result.Failure<MultiplePermissionAssignmentResult>(Error.NotFound("Role.NotFound", $"Role with ID {request.RoleId} not found"));
         }
 
         result.RoleName = role.Name;
@@ -129,6 +130,6 @@ public class AssignMultiplePermissionsToRole
             _logger.LogInformation("No se asignaron nuevos permisos al rol {RoleId}, omitiendo invalidación de sesiones", request.RoleId);
         }
 
-        return result;
+        return Result.Success(result);
     }
 }

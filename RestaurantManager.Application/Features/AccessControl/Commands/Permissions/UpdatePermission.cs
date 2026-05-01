@@ -1,5 +1,6 @@
 using AutoMapper;
 using RestaurantManager.Application.DTOs.AccessControl;
+using RestaurantManager.Domain.Common;
 using RestaurantManager.Domain.Entities.AccessControl;
 using RestaurantManager.Domain.Repositories;
 
@@ -16,20 +17,20 @@ namespace RestaurantManager.Application.Features.AccessControl.Commands.Permissi
             _mapper = mapper;
         }
 
-        public async Task<PermissionDto> HandleAsync(Guid id, UpdatePermissionDto updatePermissionDto, CancellationToken cancellationToken)
+        public async Task<Result<PermissionDto>> HandleAsync(Guid id, UpdatePermissionDto updatePermissionDto, CancellationToken cancellationToken)
         {
             // Find existing permission
             var permission = await _permissionRepository.Find(x => x.Id == id, cancellationToken);
             if (permission == null)
-                throw new KeyNotFoundException("Permission not found");
+                return Result.Failure<PermissionDto>(Error.NotFound("Permission.NotFound", "Permission not found"));
 
             // Validate that the name doesn't already exist (if it's being updated)
-            if (!string.IsNullOrWhiteSpace(updatePermissionDto.Name) && 
+            if (!string.IsNullOrWhiteSpace(updatePermissionDto.Name) &&
                 updatePermissionDto.Name != permission.Name)
             {
                 var existingPermission = await _permissionRepository.Find(x => x.Name == updatePermissionDto.Name, cancellationToken);
                 if (existingPermission != null)
-                    throw new InvalidOperationException("A Permission with this name already exists");
+                    return Result.Failure<PermissionDto>(Error.Conflict("Permission.NameExists", "A Permission with this name already exists"));
             }
 
             // Map updated values from DTO to existing entity
@@ -39,7 +40,7 @@ namespace RestaurantManager.Application.Features.AccessControl.Commands.Permissi
             await _permissionRepository.Update(permission, cancellationToken);
 
             // Map Entity back to DTO for return
-            return _mapper.Map<PermissionDto>(permission);
+            return Result.Success(_mapper.Map<PermissionDto>(permission));
         }
     }
 }
