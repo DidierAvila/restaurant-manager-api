@@ -1,0 +1,207 @@
+# Evaluación técnica — Sistema legacy El Buen Sazón
+
+**Autor:** Didier Avila  
+**Fecha:** 30 de abril de 2026  
+**Stack:** ASP.NET WebForms 4.7.2, SQL Server, C#
+
+---
+
+## Contexto
+
+Me tocó revisar el código de este sistema que al parecer nadie ha tocado desde 2012 (los comentarios de "Don Carlos" lo confirman). Es un WebForms clásico con tres pantallas: menú, pedidos y reportes. No es un proyecto grande, pero tiene problemas serios que en producción serían un dolor de cabeza real. Voy a documentar lo que encontré, en orden de lo que más me preocupa.
+
+---
+
+## Lo más grave primero
+
+### SQL Injection en absolutamente todo
+
+Este es el problema que más me saltó a la vista y está en los tres archivos de code-behind. No se usan parámetros SQL en ninguna parte. Todo se construye concatenando strings directamente:
+
+```csharp
+// Menu.aspx.cs
+query += " WHERE categoria = '" + filtro + "'";
+
+// Pedidos.aspx.cs
+string query = "INSERT INTO pedidos (mesa, mesero...) VALUES ("
+    + mesa + ", '" + txtMesero.Text.Replace("'", "''") + "'...";
+```
+
+El `Replace("'", "''")` que usaron en algunos campos de texto es un parche muy básico. No sirve para campos numéricos (como `id` o `mesa`), no cubre todos los vectores de ataque y da una falsa sensación de seguridad. Cualquier persona con conocimientos básicos de SQL podría extraer toda la base de datos, modificar precios o borrar pedidos.
+
+La solución es usar `SqlParameter` en todos lados, sin excepción. No hay forma de "mitagar parcialmente" esto — o se parametriza todo o el sistema está vulnerable.
+
+```csharp
+// Así debería verse
+var cmd = new SqlCommand("SELECT * FROM platos WHERE categoria = @cat", conn);
+cmd.Parameters.AddWithValue("@cat", filtro);
+```
+
+---
+
+### El manejador de errores está roto
+
+Este me pareció interesante porque es un bug dentro del código que supuestamente maneja los bugs. En `Global.asax.cs`:
+
+```csharp
+protected void Application_Error(object sender, EventArgs e)
+{
+    Exception ex = Server.GetLastError();
+    System.Diagnostics.EventLog.WriteEntry("El Buen Sazón", ex.ToString(), ...);
+}
+```
+
+El problema es que `EventLog.WriteEntry` requiere que la fuente (`"El Buen Sazón"`) esté registrada previamente en Windows con privilegios de administrador. Si no está registrada — y claramente no está, nadie lo hizo — este método lanza su propia excepción. O sea, el sistema falla, el manejador de errores intenta loguear, y también falla. Ningún error queda registrado en ningún lado.
+
+Aparte del bug en sí, escribir en el Event Log de Windows no es una buena idea para una aplicación web. Nadie lo revisa. El propio comentario en el código dice *"que nadie revisa"*. Habría que usar algo como NLog o al menos `Trace` para escribir a un archivo de texto.
+
+---
+
+### Conexiones a la base de datos que nunca se cierran
+
+`DatabaseHelper.cs` tiene un problema de recursos que con suficiente carga o suficientes errores puede dejar el sistema sin conexiones disponibles:
+
+```csharp
+public static int ExecuteNonQuery(string query)
+{
+    SqlConnection conn = GetConnection();
+    SqlCommand cmd = new SqlCommand(query, conn);
+    int result = cmd.ExecuteNonQuery(); // si esto falla con excepción...
+    conn.Close();                       // esta línea nunca se ejecuta
+    return result;
+}
+```
+
+En el día a día esto no se nota porque el pool de conexiones de ADO.NET gestiona bastante bien, pero ante errores frecuentes (que con SQL injection hay muchos) el pool se agota y el sistema simplemente deja de funcionar con errores de "timeout esperando conexión".
+
+Todo debería estar en `using`:
+
+```csharp
+using (var conn = new SqlConnection(ConnectionString))
+using (var cmd = new SqlCommand(query, conn))
+{
+    conn.Open();
+    return cmd.ExecuteNonQuery();
+}
+```
+
+El `ExecuteReader` usa `CommandBehavior.CloseConnection`, que es la forma correcta para readers, pero el `SqlCommand` tampoco se dispone ahí.
+
+---
+
+### No hay autenticación
+
+Cualquier persona que conozca la URL puede entrar al sistema y hacer cualquier cosa: cambiar precios, crear pedidos falsos, ver el historial de ventas. `Default.aspx` simplemente hace `Response.Redirect("Menu.aspx")` sin ninguna verificación.
+
+Para un sistema interno de restaurante quizás no es el fin del mundo si la red está bien restringida, pero debería tener al menos autenticación básica con Forms Authentication.
+
+---
+
+## Bugs que encontré
+
+### NullReferenceException esperando pasar
+
+En `Pedidos.aspx.cs` hay varios lugares donde se llama `.ToString()` directamente sobre el resultado de `ExecuteScalar` sin verificar si es null:
+
+```csharp
+string estado = DatabaseHelper.ExecuteScalar(checkEstado).ToString(); // crash si no existe
+// ...
+object mesa = DatabaseHelper.ExecuteScalar(query);
+lblMesaActiva.Text = mesa.ToString(); // ídem
+```
+
+`ExecuteScalar` retorna `null` cuando la consulta no devuelve filas. Combinado con la inyección SQL que permite manipular IDs, esto es trivialmente explotable para causar errores en el sistema.
+
+---
+
+### Race condition al crear pedidos
+
+En `btnCrearPedido_Click` se verifica primero si hay un pedido abierto en la mesa y luego se inserta:
+
+```csharp
+int pedidosAbiertos = Convert.ToInt32(DatabaseHelper.ExecuteScalar(checkQuery));
+if (pedidosAbiertos > 0) { ... return; }
+// En este punto otra solicitud podría crear un pedido para la misma mesa
+DatabaseHelper.ExecuteNonQuery(insertQuery);
+```
+
+Esto no debería pasar seguido en un restaurante con pocos empleados, pero existe el riesgo. Lo mismo aplica para la verificación de nombre duplicado de platos en `Menu.aspx.cs`. La solución es usar una transacción con nivel de aislamiento adecuado o hacer la operación como un `INSERT WHERE NOT EXISTS` atómico.
+
+---
+
+### Los mensajes de error exponen detalles internos
+
+Todos los bloques `catch` hacen esto:
+
+```csharp
+lblError.Text = "Error guardando: " + ex.Message;
+```
+
+`ex.Message` en un error de SQL Server puede contener el nombre de la tabla, la columna, el nombre del servidor, el tipo de constraint que falló, etc. Es información útil para el atacante, no para el usuario final. Los errores deberían loguearse internamente y mostrar un mensaje genérico al usuario.
+
+---
+
+## Malas prácticas que hay que corregir
+
+**`debug="true"` en Web.config** — Seguramente quedó así porque lo pusieron para desarrollo y nadie lo cambió. En producción esto expone stack traces completos en el navegador. Cambiar a `false`.
+
+**`SELECT *` en la consulta de edición de plato** — `Menu.aspx.cs` tiene `"SELECT * FROM platos WHERE id = " + id`. Habría que seleccionar solo las columnas que se necesitan.
+
+**Los estados del pedido como strings literales** — `"Abierto"`, `"En Preparación"`, `"Listo"`, etc. aparecen como strings hardcodeados en el switch, en el ASPX, en el SQL. Si alguien cambia uno, hay que buscarlo en varios archivos. Peor aún, `"En Preparación"` tiene una tilde que dependiendo del encoding de la base de datos podría no hacer match correctamente. Debería ser una clase de constantes o un enum.
+
+**Las categorías están duplicadas en tres lugares** — Están en el DropDownList del ASPX, en el filtro, y en el CHECK constraint del SQL. Agregar una categoría nueva requiere tocar todo eso. Lo correcto sería una tabla en la BD y cargar los combos dinámicamente.
+
+**`lblPedidoId` como almacenamiento de estado** — Se está usando el Text de un Label para guardar el ID del pedido activo y recuperarlo en el siguiente postback. Funciona por el ViewState pero es un patrón feo. Un `HiddenField` es más apropiado para guardar estado que no se muestra al usuario.
+
+**Sin paginación en los GridViews** — Los tres GridViews cargan todos los registros sin límite. Para un restaurante con meses de operación, la pantalla de pedidos podría cargar cientos de registros en cada request.
+
+**Sin transacciones en operaciones compuestas** — Varias operaciones que deberían ser atómicas se hacen como llamadas independientes a la BD. Si falla a mitad, los datos quedan en estado inconsistente.
+
+---
+
+## Cosas menores pero que vale la pena mencionar
+
+- La cadena de conexión en `Web.config` tiene el nombre de la máquina de desarrollo (`Alejo\SQLEXPRESS`) commiteado en el repositorio. Eso debería ir en variables de entorno o en un archivo de configuración local que no sube al repo.
+
+- `setup_sqlserver.sql` hace `DROP TABLE` al inicio. Si alguien ejecuta ese script por error en producción, se pierden todos los datos. Habría que separar el script de setup del de seed data.
+
+- No hay índice en `platos.categoria`, que es la columna más usada para filtrar en la pantalla de menú.
+
+- El campo de mesero acepta cualquier cosa que no sea vacía — incluso un solo espacio supera la validación.
+
+- `Default.aspx` tiene código de lógica inline en el ASPX sin code-behind, que es una práctica que se fue abandonando hace años por buenas razones.
+
+---
+
+## Arquitectura general
+
+El sistema no tiene capas. Toda la lógica de negocio, acceso a datos y presentación está mezclada en los code-behind. `DatabaseHelper.cs` es básicamente una sola función que ejecuta SQL crudo sin ninguna abstracción sobre las entidades del dominio.
+
+Para una aplicación de este tamaño no hace falta sobreingeniería, pero como mínimo debería separarse el acceso a datos de la lógica de presentación. Si esto creciera o hubiera que escribirle pruebas, en el estado actual sería muy difícil.
+
+---
+
+## Lo que sí está bien
+
+Para ser justo, hay cosas bien hechas:
+
+- El schema SQL está bien diseñado. Las constraints (`CHECK`, `FOREIGN KEY`, `UNIQUE`) protegen la integridad de los datos a nivel de base de datos, lo cual es una red de seguridad aunque la aplicación no valide correctamente.
+- La máquina de estados del pedido es lógicamente correcta: Abierto → En Preparación → Listo → Entregado → Cerrado, y no permite retroceder.
+- Se verifica que un pedido tenga platos antes de avanzar de estado.
+- No se puede eliminar un plato que tiene pedidos asociados — muestra un mensaje útil y sugiere desactivarlo.
+- Los índices en `pedidos.fecha`, `pedidos.estado` y las columnas FK de `detalle_pedidos` están bien puestos.
+- La validación del precio con `decimal.TryParse` y verificación `> 0` es correcta.
+
+---
+
+## Resumen: qué arreglaría primero
+
+Si tuviera que priorizar, en este orden:
+
+1. **Parametrizar todas las consultas SQL** — no hay nada más urgente que esto
+2. **Envolver las conexiones en `using`** — es un cambio rápido con alto impacto
+3. **Corregir `Application_Error`** — porque si no hay logs, no se puede operar el sistema con tranquilidad
+4. **Cambiar `debug="false"`** — dos minutos de trabajo
+5. **No mostrar `ex.Message` al usuario** — pequeño cambio, gran diferencia en seguridad
+6. **Autenticación** — dependiendo del contexto de despliegue puede ser urgente o no
+7. El resto se puede hacer en un refactor más tranquilo
